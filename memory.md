@@ -1,21 +1,20 @@
 # Project Memory
 
 ## Current Situation
-- **Phase**: Implementation (Sprint 1)
-- **Status**: Initializing Project Scaffolding.
-- **Goal**: Set up Vite + React + TypeScript + PouchDB + FaceAPI.
+- **Phase**: Implementation (Sprint 1 - Core Services)
+- **Status**: Starting implementation of PouchDB, FaceAPI, and Camera.
+- **Goal**: Enable offline data storage and biometric capabilities.
 
 ## Technical Understanding
-- **Architecture**: Validated offline-first stack (PouchDB/CouchDB).
-- **Frontend**: React (Vite) + Tailwind CSS.
-- **AI**: face-api.js (Tiny Face Detector for mobile).
+- **PouchDB**: Needs a singleton wrapper to handle database instances (local & remote).
+- **FaceAPI**: Models must be loaded from `public/models`. `TinyFaceDetector` is prioritized for mobile.
+- **Camera**: React component wrapping `navigator.mediaDevices.getUserMedia`.
 
 ## Recent Decisions
-- Refactored PRD into modular files (`docs/`).
-- Proceeding with standard Vite + React + TS template.
-- Using PouchDB for local-first data persistence.
+- Successfully initialized project with Vite + React + TS + Tailwind v4.
+- Fixed PostCSS conflict by using `@tailwindcss/vite`.
+- Removed unused `React` import to fix build.
 
 ## Known Pitfalls
-- **FaceAPI Models**: Need to be loaded from `public/models` folder.
-- **PouchDB Sync**: Verify CORS on CouchDB (future step).
-- **Mobile Camera**: Ensure HTTPS locally or use localhost for testing camera permissions.
+- **FaceAPI Models**: Ensure model files are physically present in `public/models`.
+- **Camera Permissions**: Browser requires HTTPS or localhost.
