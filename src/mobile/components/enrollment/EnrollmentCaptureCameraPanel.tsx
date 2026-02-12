@@ -1,5 +1,3 @@
-import { useEffect, useState } from "react";
-
 import type { FaceBox, FacePoint } from "../../../services/face";
 import LiveCamera from "../../../components/Camera/LiveCamera";
 import FaceGuideOverlay from "./FaceGuideOverlay";
@@ -29,23 +27,6 @@ export default function EnrollmentCaptureCameraPanel({
   onCameraReady,
   onCameraError,
 }: EnrollmentCaptureCameraPanelProps) {
-  const [showSlowHint, setShowSlowHint] = useState(false);
-
-  useEffect(() => {
-    if (modelReady || !modelLoading) {
-      setShowSlowHint(false);
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      setShowSlowHint(true);
-    }, 15000);
-
-    return () => {
-      window.clearTimeout(timer);
-    };
-  }, [modelLoading, modelReady]);
-
   return (
     <section className="absolute inset-0">
       {modelReady ? (
@@ -65,10 +46,21 @@ export default function EnrollmentCaptureCameraPanel({
               {modelLoading ? `Loading model ${Math.max(0, Math.min(100, modelPercent))}%` : "Preparing model..."}
             </p>
             <p className="mt-1 text-[11px] text-white/70">Camera will start after model is ready.</p>
-            {showSlowHint ? (
-              <p className="mt-1.5 text-[11px] font-medium text-amber-200">
-                Network is slow. Please wait a moment, then retry if needed.
-              </p>
+            {modelLoading ? (
+              <>
+                <p
+                  className="mt-1.5 text-[11px] font-medium text-amber-200 opacity-0"
+                  style={{ animation: "enroll-slow-hint 1ms linear 15s forwards" }}
+                >
+                  Network is slow. Please wait a moment, then retry if needed.
+                </p>
+                <style>{`
+                  @keyframes enroll-slow-hint {
+                    0% { opacity: 0; }
+                    100% { opacity: 1; }
+                  }
+                `}</style>
+              </>
             ) : null}
           </div>
         </div>
