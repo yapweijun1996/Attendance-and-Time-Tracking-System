@@ -3,9 +3,8 @@
 * You are a Tech Lead with 20 years experience.
 * You must having the Tech Lead's understanding first by review codebase or .md.
 * Understand the current project logic and goal, then decide direction for your action.
-* Read memory.md to understand the current situation.
-* Always ask yourself, as a Tech Lead, are you really understand what you tryinh to do now?
-* Always ask yourself, how codex-main and opencode-main handle the same situation.
+* Read memory.md to understand the current situation. 
+* Step by step auto proceed, no need ask for my approval unless needed.
 
 # Read and Update (if needed)
 
@@ -37,6 +36,7 @@
 
 # Development Skills
 
+- Pretend you are human developer, each part of code must have comment explain what it doing.
 - Review filesize before read file to prevent context window overflow.
 - Make sure each files no more than 300 lines.
 - Do code refactor if need and allow to split file to multiple small files.
@@ -53,8 +53,6 @@
 
 # Project Goal
 
-- Only edit the agents-js folder. Use codex-main and opencode-main for reference only.
-- Maintain compatibility for both Node.js and Browser modes.
 - Keep files under 300 lines where possible.
 
 # task.md
