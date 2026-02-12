@@ -1,16 +1,12 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import EnrollCapturePage from "./pages/EnrollCapturePage";
-import EnrollConsentPage from "./pages/EnrollConsentPage";
-import EnrollLivenessPage from "./pages/EnrollLivenessPage";
-import HistoryPage from "./pages/HistoryPage";
-import HomePage from "./pages/HomePage";
-import ProfilePage from "./pages/ProfilePage";
-import ResultPage from "./pages/ResultPage";
-import VerifyPage from "./pages/VerifyPage";
+import { useCallback, useEffect, useMemo, useState } from "react";
+
+import { useStaffAccess } from "./hooks/useStaffAccess";
+import MobileMainRoutes from "./MobileMainRoutes";
+import StaffForcePasswordPage from "./pages/StaffForcePasswordPage";
 import { DEFAULT_MOBILE_ROUTE, navigateTo, readMobileRoute, type MobileRoute, type MobileRouteState } from "./router";
 import { loadRecentEvents } from "./services/attendance-log";
+import { clearEnrollmentDraft } from "./services/enrollment-draft";
 import { loadEnrollmentSummary } from "./services/enrollment";
-import { bindStaffIdWithValidation, clearBoundStaffId } from "./services/staff-binding";
 import type { AttendanceAction, EnrollStatus, RecentEvent, SyncState, VerificationResult } from "./types";
 
 function parseVerifyAction(search: string): AttendanceAction {
@@ -61,6 +57,26 @@ export default function MobileApp() {
     }
   }, []);
 
+  const {
+    staffSession,
+    refreshSessionState,
+    handleStaffPasswordChange,
+    handleStaffLogout,
+    handleBindStaff,
+    handleClearStaffBinding,
+  } = useStaffAccess({
+    refreshEnrollment,
+    refreshRecentEvents,
+    setAppError,
+    setAppNotice,
+    setStaffBound,
+    setStaffId,
+    setStaffName,
+    setEnrollStatus,
+    setDescriptorCount,
+    setLastResult,
+  });
+
   useEffect(() => {
     const onPopState = () => setRouteState(readMobileRoute());
     window.addEventListener("popstate", onPopState);
@@ -83,6 +99,7 @@ export default function MobileApp() {
         }
         pouchDBService.init();
         setDbReady(true);
+        await refreshSessionState();
         await Promise.all([refreshRecentEvents(), refreshEnrollment()]);
       } catch (error) {
         if (!cancelled) {
@@ -94,7 +111,7 @@ export default function MobileApp() {
     return () => {
       cancelled = true;
     };
-  }, [refreshEnrollment, refreshRecentEvents]);
+  }, [refreshEnrollment, refreshRecentEvents, refreshSessionState]);
 
   useEffect(() => {
     if (!dbReady) {
@@ -105,8 +122,9 @@ export default function MobileApp() {
     }
     if (routeState.route === "/m/home" || routeState.route === "/m/profile") {
       void refreshEnrollment();
+      void refreshSessionState();
     }
-  }, [dbReady, refreshEnrollment, refreshRecentEvents, routeState.route]);
+  }, [dbReady, refreshEnrollment, refreshRecentEvents, refreshSessionState, routeState.route]);
 
   useEffect(() => {
     const onOnline = () => setOnline(true);
@@ -119,13 +137,31 @@ export default function MobileApp() {
     };
   }, []);
 
+  useEffect(() => {
+    if (!dbReady) {
+      return;
+    }
+    const route = routeState.route;
+    if (!staffSession) {
+      navigateTo("/login?role=staff", true);
+      return;
+    }
+    if (staffSession?.mustChangePassword && route !== "/m/change-password") {
+      navigateTo("/m/change-password", true);
+      return;
+    }
+    if (staffSession && !staffSession.mustChangePassword && (route === "/m/login" || route === "/m/change-password")) {
+      navigateTo("/m/home", true);
+    }
+  }, [dbReady, routeState.route, staffSession]);
+
   const verifyAction = useMemo(() => parseVerifyAction(routeState.search), [routeState.search]);
   const handleNavigate = useCallback((route: MobileRoute) => navigateTo(route), []);
   const handleNavigatePath = useCallback((path: string) => navigateTo(path), []);
 
   const handleStartEnrollment = useCallback(() => {
     if (!staffBound) {
-      setAppError("No staff is bound to this device. Please bind Staff ID in Profile first.");
+      setAppError("No staff is bound to this session. Please contact admin.");
       navigateTo("/m/profile");
       return;
     }
@@ -133,6 +169,7 @@ export default function MobileApp() {
     setEnrollConsentAcceptedAt(null);
     setEnrollDescriptors([]);
     setEnrollPhotos([]);
+    clearEnrollmentDraft();
     navigateTo("/m/enroll/consent");
   }, [staffBound]);
 
@@ -141,28 +178,6 @@ export default function MobileApp() {
       handleStartEnrollment();
     }
   }, [enrollStatus, handleStartEnrollment, routeState.route]);
-
-  const handleBindStaff = useCallback(async (nextStaffId: string) => {
-    try {
-      const staff = await bindStaffIdWithValidation(nextStaffId);
-      setAppError(null);
-      setAppNotice(`Bound to ${staff.staffId} (${staff.name}).`);
-      await refreshEnrollment();
-    } catch (error) {
-      setAppError(error instanceof Error ? error.message : "Failed to bind staff.");
-    }
-  }, [refreshEnrollment]);
-
-  const handleClearStaffBinding = useCallback(async () => {
-    clearBoundStaffId();
-    setEnrollStatus("PENDING_CONSENT");
-    setDescriptorCount(0);
-    setStaffBound(false);
-    setStaffId(null);
-    setStaffName(null);
-    setAppNotice("Staff binding cleared. Bind another staff to continue.");
-    await refreshEnrollment();
-  }, [refreshEnrollment]);
 
   const handleConsentAccepted = useCallback((acceptedAt: string) => {
     setEnrollConsentAcceptedAt(acceptedAt);
@@ -184,6 +199,7 @@ export default function MobileApp() {
         setEnrollConsentAcceptedAt(null);
         setEnrollDescriptors([]);
         setEnrollPhotos([]);
+        clearEnrollmentDraft();
         setAppError(null);
         setAppNotice(message);
         navigateTo("/m/home");
@@ -216,56 +232,36 @@ export default function MobileApp() {
   );
 
   const currentRoute = routeState.route ?? DEFAULT_MOBILE_ROUTE;
-  const banner = appError ? <div className="ui-banner-error">{appError}</div> : appNotice ? <div className="ui-banner-success">{appNotice}</div> : null;
+  const sidebarBannerOffset = ["/m/home", "/m/history", "/m/profile", "/m/enroll/consent", "/m/enroll/capture", "/m/enroll/liveness"].includes(currentRoute);
+  const bannerMessage = appError ?? appNotice;
+  const banner = bannerMessage ? (
+    <div className={sidebarBannerOffset ? "px-4 pt-4 sm:px-8 lg:pr-8 lg:pl-72" : "px-4 pt-4 sm:px-8"}>
+      <div className={appError ? "ui-banner-error" : "ui-banner-success"}>{bannerMessage}</div>
+    </div>
+  ) : null;
 
-  let content: ReactNode;
-  if (currentRoute === "/m/enroll/consent") {
-    content = <EnrollConsentPage onBack={() => navigateTo("/m/home")} onAccepted={handleConsentAccepted} />;
-  } else if (currentRoute === "/m/enroll/capture") {
-    content = (
-      <EnrollCapturePage
-        consentAcceptedAt={enrollConsentAcceptedAt}
-        initialDescriptors={enrollDescriptors}
-        initialPhotos={enrollPhotos}
-        onBack={() => navigateTo("/m/enroll/consent")}
-        onReset={() => {
-          setEnrollDescriptors([]);
-          setEnrollPhotos([]);
-        }}
-        onCompleted={handleCaptureCompleted}
-      />
+  if (currentRoute === "/m/login") {
+    navigateTo("/login?role=staff", true);
+    return <>{banner}</>;
+  }
+
+  if (currentRoute === "/m/change-password") {
+    return (
+      <>
+        {banner}
+        <StaffForcePasswordPage
+          staffId={staffSession?.staffId ?? ""}
+          onSubmit={handleStaffPasswordChange}
+          onLogout={handleStaffLogout}
+        />
+      </>
     );
-  } else if (currentRoute === "/m/enroll/liveness") {
-    content = (
-        <EnrollLivenessPage
-          consentAcceptedAt={enrollConsentAcceptedAt}
-          descriptors={enrollDescriptors}
-          photos={enrollPhotos}
-          onBack={() => navigateTo("/m/enroll/capture")}
-          onRestart={handleStartEnrollment}
-          onSaved={handleEnrollmentSaved}
-      />
-    );
-  } else if (currentRoute === "/m/verify") {
-    content = (
-      <VerifyPage action={verifyAction} onBack={() => navigateTo("/m/home")} onCompleted={handleVerifyCompleted} />
-    );
-  } else if (currentRoute === "/m/result") {
-    content = (
-      <ResultPage currentRoute={currentRoute} result={lastResult} onNavigatePath={handleNavigatePath} onNavigate={handleNavigate} />
-    );
-  } else if (currentRoute === "/m/history") {
-    content = (
-      <HistoryPage
-        currentRoute={currentRoute}
-        staffName={staffName}
-        events={recentEvents}
-        onNavigate={handleNavigate}
-      />
-    );
-  } else if (currentRoute === "/m/profile") {
-    content = (
-      <ProfilePage
+  }
+
+  return (
+    <>
+      {banner}
+      <MobileMainRoutes
         currentRoute={currentRoute}
         dbReady={dbReady}
         enrollStatus={enrollStatus}
@@ -274,29 +270,29 @@ export default function MobileApp() {
         staffId={staffId}
         staffName={staffName}
         online={online}
-        onStartEnrollment={handleStartEnrollment}
-        onBindStaff={handleBindStaff}
-        onClearStaffBinding={handleClearStaffBinding}
-        onNavigate={handleNavigate}
-      />
-    );
-  } else {
-    content = (
-      <HomePage
-        currentRoute={currentRoute}
-        dbReady={dbReady}
-        enrollStatus={enrollStatus}
-        staffBound={staffBound}
-        staffName={staffName}
-        online={online}
         latestSyncState={latestSyncState}
         recentEvents={recentEvents}
+        lastResult={lastResult}
+        verifyAction={verifyAction}
+        enrollConsentAcceptedAt={enrollConsentAcceptedAt}
+        enrollDescriptors={enrollDescriptors}
+        enrollPhotos={enrollPhotos}
         onAction={handleAction}
         onStartEnrollment={handleStartEnrollment}
         onNavigate={handleNavigate}
+        onNavigatePath={handleNavigatePath}
+        onBindStaff={handleBindStaff}
+        onClearStaffBinding={handleClearStaffBinding}
+        onLogout={handleStaffLogout}
+        onVerifyCompleted={handleVerifyCompleted}
+        onConsentAccepted={handleConsentAccepted}
+        onCaptureCompleted={handleCaptureCompleted}
+        onCaptureReset={() => {
+          setEnrollDescriptors([]);
+          setEnrollPhotos([]);
+        }}
+        onEnrollmentSaved={handleEnrollmentSaved}
       />
-    );
-  }
-
-  return <>{banner}{content}</>;
+    </>
+  );
 }

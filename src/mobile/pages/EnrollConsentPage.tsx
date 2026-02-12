@@ -1,4 +1,5 @@
 import { ENROLLMENT_CONSENT_VERSION } from "../services/enrollment";
+import { saveEnrollmentDraft } from "../services/enrollment-draft";
 
 interface EnrollConsentPageProps {
   onBack: () => void;
@@ -26,7 +27,7 @@ export default function EnrollConsentPage({ onBack, onAccepted }: EnrollConsentP
 
           <ul className="mt-4 space-y-2 text-sm text-slate-700">
             <li>1. Device camera will be used for enrollment and attendance verification.</li>
-            <li>2. The profile stores face descriptors only and no raw enrollment images.</li>
+            <li>2. The profile stores face descriptors and enrollment snapshots for audit traceability.</li>
             <li>3. You can request admin reset when profile changes are needed.</li>
           </ul>
         </section>
@@ -34,7 +35,13 @@ export default function EnrollConsentPage({ onBack, onAccepted }: EnrollConsentP
         <button
           type="button"
           onClick={() => {
-            onAccepted(new Date().toISOString());
+            const acceptedAt = new Date().toISOString();
+            saveEnrollmentDraft({
+              consentAcceptedAt: acceptedAt,
+              descriptors: [],
+              photos: [],
+            });
+            onAccepted(acceptedAt);
           }}
           className="ui-btn ui-btn-primary mt-4 w-full"
         >

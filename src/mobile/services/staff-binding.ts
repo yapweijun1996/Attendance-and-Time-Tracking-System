@@ -1,5 +1,5 @@
 import type { StaffProfile } from "../../types/domain";
-import { listStaffProfiles, loadStaffProfile } from "../../services/staff-master";
+import { loadStaffProfile } from "../../services/staff-master";
 
 const CURRENT_STAFF_ID_STORAGE_KEY = "satts.mobile.currentStaffId";
 
@@ -46,12 +46,6 @@ export async function resolveBoundStaffProfile(): Promise<StaffProfile | null> {
     }
     clearBoundStaffId();
     return null;
-  }
-
-  const staffList = await listStaffProfiles(50);
-  if (staffList.length === 1 && staffList[0].status !== "LOCKED") {
-    bindStaffId(staffList[0].staffId);
-    return staffList[0];
   }
   return null;
 }

@@ -274,7 +274,6 @@
   - `npm run build` passed.
 - Expected Outcome:
   - Mobile MVP flow is now executable and ready for next component cards (`C03`, `C05`, `C06`, `C07`).
-
 ## Follow-up Log (2026-02-12, Round C5)
 - Scope: Execute component cards `C03`, `C05`, `C06`, `C07`, `C08` + tri-platform layout + visual system closure.
 - Completed:
@@ -286,15 +285,15 @@
   - `npm run lint` passed.
   - `npm run build` passed.
 
-## Follow-up Log (2026-02-12, Round C20)
-- Scope: Add role-based guard for `/debug/db` (Super Admin write, Admin read-only).
+## Follow-up Log (2026-02-12, Round C37)
+- Scope: Upgrade `/m/enroll/capture` from engineering-style diagnostics to product-grade visual guidance.
 - Completed:
-  - Updated `src/app/AppRouter.tsx` so `/debug/db` requires admin session once setup is ready; unauthenticated users are redirected to `/admin/login`.
-  - Updated `src/app/pages/DebugDatabasePage.tsx` to accept `adminSession` and hard-enforce write permission by role.
-  - `SUPER_ADMIN` keeps manual unlock flow (`ENABLE_EDIT`); non-super roles are forced read-only without unlock controls.
-  - Extended `src/services/admin-auth.ts` parser to accept both `SUPER_ADMIN` and `ADMIN` session roles.
+  - `src/mobile/components/enrollment/FaceGuideOverlay.tsx`: replaced rectangle guide with center oval guide, added spotlight dim mask, kept detected face ellipse + landmark contour/points for visible tracking feedback.
+  - `src/mobile/pages/EnrollCapturePage.tsx`: redesigned info hierarchy with larger `currentHint`, compact state chip, and icon-like light/distance signals.
+  - Added shutter-like capture feedback (100ms white flash) via CSS animation keyed by descriptor count, avoiding extra runtime pressure.
+  - Upgraded action controls (`Pause/Reset/Continue`) to stronger glassmorphism style (blur + bright border) while keeping mobile-safe touch sizes.
 - Verification:
   - `npm run lint` passed.
   - `npm run build` passed.
 - Expected Outcome:
-  - Debug DB is now protected by login and role policy, reducing accidental or unauthorized writes.
+  - Capture focus is clearer, operator confidence improves during 20-shot auto enrollment, and UI is closer to production product quality.

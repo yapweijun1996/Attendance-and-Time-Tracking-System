@@ -1,13 +1,9 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
-import LiveCamera from "../../components/Camera/LiveCamera";
-import type { FaceModelLoadProgress } from "../../services/face";
-
-const CAPTURE_TARGET = 20;
-const MIN_DETECTION_SCORE = 0.55;
-const MIN_DESCRIPTOR_DIFF_PERCENT = 15;
-
-const captureHints = ["Face Forward", "Turn Left", "Turn Right", "Look Up", "Look Down"];
+import EnrollmentCaptureCameraPanel from "../components/enrollment/EnrollmentCaptureCameraPanel";
+import EnrollmentCaptureConsentNotice from "../components/enrollment/EnrollmentCaptureConsentNotice";
+import CapturedPhotoGallery from "../components/enrollment/CapturedPhotoGallery";
+import { useEnrollmentCaptureFlow } from "../hooks/useEnrollmentCaptureFlow";
 
 interface EnrollCapturePageProps {
   consentAcceptedAt: string | null;
@@ -18,276 +14,158 @@ interface EnrollCapturePageProps {
   onCompleted: (payload: { descriptors: number[][]; photos: string[] }) => void;
 }
 
-function euclideanDistance(left: number[], right: number[]): number {
-  if (left.length !== right.length) {
-    return Number.POSITIVE_INFINITY;
+function statePillClass(state: string): string {
+  if (state === "TOO_SIMILAR") {
+    return "border-amber-300/35 bg-amber-400/15 text-amber-100";
   }
-
-  let sum = 0;
-  for (let index = 0; index < left.length; index += 1) {
-    const delta = left[index] - right[index];
-    sum += delta * delta;
+  if (state === "LOW_CONFIDENCE") {
+    return "border-red-300/35 bg-red-400/15 text-red-100";
   }
-  return Math.sqrt(sum);
+  if (state === "CAPTURED") {
+    return "border-emerald-300/35 bg-emerald-400/15 text-emerald-100";
+  }
+  return "border-white/25 bg-black/55 text-white";
 }
 
-function descriptorDifferencePercent(distance: number): number {
-  const percent = distance * 100;
-  return Math.max(0, Math.min(100, percent));
-}
-
-function captureEnrollmentPhoto(videoElement: HTMLVideoElement): string {
-  const sourceWidth = videoElement.videoWidth || 640;
-  const sourceHeight = videoElement.videoHeight || 480;
-  const maxWidth = 480;
-  const scale = sourceWidth > maxWidth ? maxWidth / sourceWidth : 1;
-  const targetWidth = Math.max(1, Math.round(sourceWidth * scale));
-  const targetHeight = Math.max(1, Math.round(sourceHeight * scale));
-
-  const canvas = document.createElement("canvas");
-  canvas.width = targetWidth;
-  canvas.height = targetHeight;
-  const context = canvas.getContext("2d");
-  if (!context) {
-    throw new Error("Unable to create image context for enrollment photo.");
-  }
-
-  // Keep snapshot lightweight to reduce storage and sync pressure.
-  context.drawImage(videoElement, 0, 0, targetWidth, targetHeight);
-  const dataUrl = canvas.toDataURL("image/jpeg", 0.75);
-  const base64 = dataUrl.split(",")[1];
-  if (!base64) {
-    throw new Error("Failed to encode enrollment photo.");
-  }
-  return base64;
-}
-
-export default function EnrollCapturePage({
-  consentAcceptedAt,
-  initialDescriptors,
-  initialPhotos,
-  onBack,
-  onReset,
-  onCompleted,
-}: EnrollCapturePageProps) {
-  const [modelPercent, setModelPercent] = useState(0);
-  const [modelReady, setModelReady] = useState(false);
-  const [modelLoading, setModelLoading] = useState(true);
-  const [modelError, setModelError] = useState<string | null>(null);
-  const [cameraReady, setCameraReady] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
-  const [descriptors, setDescriptors] = useState<number[][]>(initialDescriptors);
-  const [photos, setPhotos] = useState<string[]>(initialPhotos);
-  const [captureBusy, setCaptureBusy] = useState(false);
-  const [captureHint, setCaptureHint] = useState("Capture with prompt changes to improve descriptor diversity.");
-  const [lastMinDiffPercent, setLastMinDiffPercent] = useState<number | null>(null);
+export default function EnrollCapturePage(props: EnrollCapturePageProps) {
+  const flow = useEnrollmentCaptureFlow(props);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const shouldResumeAfterPreviewRef = useRef(false);
+  const autoContinueCountRef = useRef<number>(-1);
+  const hasConsent = flow.hasConsent;
+  const descriptorCount = flow.descriptors.length;
+  const captureTarget = flow.captureTarget;
+  const canContinue = descriptorCount >= captureTarget;
+  const handleContinue = flow.handleContinue;
+  const autoCaptureEnabled = flow.autoCaptureEnabled;
+  const toggleAutoCapture = flow.handleToggleAutoCapture;
 
   useEffect(() => {
-    let cancelled = false;
-
-    const loadModels = async () => {
-      setModelLoading(true);
-      setModelError(null);
-      try {
-        const { faceAPIService } = await import("../../services/face");
-        await faceAPIService.loadModels("/models", (progress: FaceModelLoadProgress) => {
-          if (!cancelled) {
-            setModelPercent(progress.percent);
-          }
-        });
-        if (!cancelled) {
-          setModelReady(true);
-        }
-      } catch (error) {
-        if (cancelled) {
-          return;
-        }
-        const message = error instanceof Error ? error.message : "Failed to load face model.";
-        setModelError(message);
-      } finally {
-        if (!cancelled) {
-          setModelLoading(false);
-        }
-      }
-    };
-
-    void loadModels();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const currentHint = useMemo(
-    () => captureHints[descriptors.length % captureHints.length],
-    [descriptors.length]
-  );
-
-  const handleCapture = useCallback(async () => {
-    if (!videoElement || !cameraReady || !modelReady || captureBusy) {
+    // Pause auto capture while fullscreen preview is open and restore only if we paused it.
+    if (previewOpen && autoCaptureEnabled) {
+      toggleAutoCapture();
+      shouldResumeAfterPreviewRef.current = true;
       return;
     }
-    if (descriptors.length >= CAPTURE_TARGET) {
+    if (!previewOpen && shouldResumeAfterPreviewRef.current && !autoCaptureEnabled) {
+      toggleAutoCapture();
+      shouldResumeAfterPreviewRef.current = false;
+    }
+  }, [autoCaptureEnabled, previewOpen, toggleAutoCapture]);
+
+  useEffect(() => {
+    // Once target is reached, move to next step automatically.
+    if (!hasConsent || !canContinue || previewOpen) {
       return;
     }
-
-    setCaptureBusy(true);
-    try {
-      const { faceAPIService } = await import("../../services/face");
-      const detection = await faceAPIService.detectFace(videoElement);
-      if (!detection) {
-        throw new Error("No face detected. Keep face centered and retry.");
-      }
-      if (detection.score < MIN_DETECTION_SCORE) {
-        throw new Error("Face confidence is low. Increase lighting and keep still.");
-      }
-
-      const descriptor = Array.from(detection.descriptor);
-      const photoBase64 = captureEnrollmentPhoto(videoElement);
-
-      // Prevent near-duplicate captures so enrollment contains meaningful angle changes.
-      if (descriptors.length > 0) {
-        const minDistance = Math.min(
-          ...descriptors.map((savedDescriptor) => euclideanDistance(savedDescriptor, descriptor))
-        );
-        const minDiffPercent = descriptorDifferencePercent(minDistance);
-        setLastMinDiffPercent(minDiffPercent);
-        if (minDiffPercent < MIN_DESCRIPTOR_DIFF_PERCENT) {
-          setCaptureHint(
-            `Too similar (${minDiffPercent.toFixed(2)}%). Need >= ${MIN_DESCRIPTOR_DIFF_PERCENT}%. Change angle and retry.`
-          );
-          return;
-        }
-      }
-
-      const nextDescriptors = [...descriptors, descriptor];
-      const nextPhotos = [...photos, photoBase64];
-      setDescriptors(nextDescriptors);
-      setPhotos(nextPhotos);
-      if (nextDescriptors.length >= CAPTURE_TARGET) {
-        setCaptureHint("Capture complete. Continue to liveness challenge.");
-      } else {
-        setCaptureHint("Captured. Switch pose and continue.");
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Descriptor capture failed.";
-      setCaptureHint(message);
-    } finally {
-      setCaptureBusy(false);
+    if (autoContinueCountRef.current === descriptorCount) {
+      return;
     }
-  }, [cameraReady, captureBusy, descriptors, modelReady, photos, videoElement]);
+    autoContinueCountRef.current = descriptorCount;
+    handleContinue();
+  }, [canContinue, descriptorCount, handleContinue, hasConsent, previewOpen]);
 
-  if (!consentAcceptedAt) {
-    return (
-      <div className="ui-page-flow">
-        <main className="ui-main-flow">
-          <h1 className="ui-title text-xl">Enrollment Capture</h1>
-          <p className="ui-note-warn mt-2">
-            Consent is required before capture. Return to consent step first.
-          </p>
-          <button
-            type="button"
-            onClick={onBack}
-            className="ui-btn ui-btn-primary mt-4 w-full"
-          >
-            Back To Consent
-          </button>
-        </main>
-      </div>
-    );
+  if (!hasConsent) {
+    return <EnrollmentCaptureConsentNotice onBack={props.onBack} />;
   }
 
+  const activeState = flow.captureState === "COMPLETED" ? "CAPTURED" : flow.captureState;
+
   return (
-    <div className="ui-page-flow">
-      <main className="ui-main-flow">
-        <button type="button" onClick={onBack} className="ui-back-btn">
-          Back
-        </button>
+    <div className="relative min-h-screen overflow-hidden bg-black">
+      <EnrollmentCaptureCameraPanel
+        modelReady={flow.modelReady}
+        modelLoading={flow.modelLoading}
+        modelPercent={flow.modelPercent}
+        modelError={flow.modelError}
+        cameraError={flow.cameraError}
+        videoElement={flow.videoElement}
+        faceGuideBox={flow.faceGuideBox}
+        faceGuideLandmarks={flow.faceGuideLandmarks}
+        onCameraReady={flow.handleCameraReady}
+        onCameraError={flow.handleCameraError}
+      />
+      {descriptorCount > 0 ? (
+        <div
+          // Remounting on count change replays the shutter animation with near-zero JS overhead.
+          key={`shutter-${descriptorCount}`}
+          className="pointer-events-none absolute inset-0 z-30 opacity-0"
+          style={{ animation: "enroll-shutter-flash 100ms ease-out" }}
+        />
+      ) : null}
+      <style>{`
+        @keyframes enroll-shutter-flash {
+          0% {
+            opacity: 0.25;
+            background-color: rgb(255 255 255);
+          }
+          100% {
+            opacity: 0;
+            background-color: rgb(255 255 255);
+          }
+        }
+      `}</style>
 
-        <h1 className="ui-title text-xl">Enrollment Capture</h1>
-        <p className="ui-note mt-1">Collect {CAPTURE_TARGET} descriptors with angle prompts.</p>
-
-        <section className="ui-card mt-4 p-4">
-          <div className="mb-2 flex items-center justify-between text-xs font-medium">
-            <span className="ui-note-xs">Progress</span>
-            <span className="ui-title text-xs">
-              {descriptors.length}/{CAPTURE_TARGET}
-            </span>
-          </div>
-          <div className="ui-progress-track">
+      <main className="relative z-20 flex min-h-screen flex-col p-3 sm:p-5">
+        <header className="pointer-events-auto flex items-center justify-between gap-3">
+          <button
+            type="button"
+            onClick={props.onBack}
+            className="rounded-xl border border-white/20 bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-md"
+          >
+            Back
+          </button>
+          <div className="flex items-center gap-2">
             <div
-              className="ui-progress-bar"
-              style={{ width: `${Math.round((descriptors.length / CAPTURE_TARGET) * 100)}%` }}
-            />
+              className={`rounded-2xl border px-3 py-1.5 text-xs font-semibold backdrop-blur-lg ${statePillClass(activeState)}`}
+            >
+              {activeState}
+            </div>
+            <div className="rounded-2xl border border-white/25 bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-lg">
+              {descriptorCount}/{captureTarget} · {flow.capturePercent}%
+            </div>
           </div>
-          <p className="ui-kicker mt-3">
-            Current Prompt: {currentHint}
-          </p>
-          <p className="ui-note-xs mt-1">{captureHint}</p>
-        </section>
+        </header>
 
-        <section className="ui-card mt-4 p-4">
-          <div className="mb-3 flex items-center justify-between text-xs font-medium">
-            <span className="ui-note-xs">Model</span>
-            <span className={modelReady ? "ui-status-ok" : "ui-status-pending"}>
-              {modelReady ? "Ready" : modelLoading ? `${modelPercent}%` : "Pending"}
-            </span>
+        <div className="flex-1" />
+
+        <section className="pointer-events-auto w-full max-w-[22rem] space-y-1.5 self-center pb-[max(0.4rem,env(safe-area-inset-bottom))] sm:max-w-md">
+          <div className="rounded-[22px] border border-white/25 bg-white/10 p-2.5 backdrop-blur-2xl shadow-[inset_0_1px_0_rgba(255,255,255,0.35)]">
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={flow.handleToggleAutoCapture}
+                className="rounded-xl border border-white/45 bg-white/15 px-2 py-1.5 text-xs font-semibold text-white backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.52)]"
+              >
+                {flow.autoCaptureEnabled ? "Pause" : "Resume"}
+              </button>
+              <button
+                type="button"
+                onClick={flow.handleReset}
+                className="rounded-xl border border-white/45 bg-white/15 px-2 py-1.5 text-xs font-semibold text-white backdrop-blur-xl shadow-[inset_0_1px_0_rgba(255,255,255,0.52)]"
+              >
+                Reset
+              </button>
+            </div>
+            <p className="mt-1.5 text-[11px] font-medium text-white/85">
+              Min difference per capture: {flow.minDescriptorDiffPercent}%.
+              {flow.lastMinDiffPercent !== null
+                ? ` Last min difference: ${flow.lastMinDiffPercent.toFixed(2)}%.`
+                : ""}
+            </p>
+            {canContinue ? (
+              <p className="mt-1 text-[10px] font-semibold text-emerald-200">
+                Target reached. Moving to next step...
+              </p>
+            ) : null}
           </div>
-          {modelError ? <p className="ui-note-error mb-2">{modelError}</p> : null}
 
-          <LiveCamera
-            facingMode="user"
-            onReady={(video) => {
-              setCameraReady(true);
-              setCameraError(null);
-              setVideoElement(video);
-            }}
-            onError={(error) => {
-              setCameraReady(false);
-              setCameraError(error.message);
-            }}
+          <CapturedPhotoGallery
+            photos={flow.photos}
+            mode="strip"
+            onPreviewOpenChange={setPreviewOpen}
           />
-          {cameraError ? <p className="ui-note-error mt-2">{cameraError}</p> : null}
-
-          <button
-            type="button"
-            onClick={() => {
-              void handleCapture();
-            }}
-            disabled={!modelReady || !cameraReady || captureBusy || descriptors.length >= CAPTURE_TARGET}
-            className="ui-btn ui-btn-primary mt-3 w-full disabled:cursor-not-allowed disabled:bg-slate-400"
-          >
-            {captureBusy ? "Capturing..." : "Capture Descriptor"}
-          </button>
         </section>
-
-        <div className="mt-4 grid grid-cols-2 gap-3">
-          <button
-            type="button"
-            onClick={() => {
-              setDescriptors([]);
-              setPhotos([]);
-              onReset();
-              setCaptureHint("Capture reset. Start again from face forward.");
-              setLastMinDiffPercent(null);
-            }}
-            className="ui-btn ui-btn-ghost min-h-0"
-          >
-            Reset
-          </button>
-          <button
-            type="button"
-            onClick={() => onCompleted({ descriptors, photos })}
-            disabled={descriptors.length < CAPTURE_TARGET}
-            className="ui-btn ui-btn-success min-h-0 disabled:cursor-not-allowed disabled:bg-slate-400"
-          >
-            Continue
-          </button>
-        </div>
-        <p className="ui-note-xs mt-2">
-          Min required difference per capture: {MIN_DESCRIPTOR_DIFF_PERCENT}%.
-          {lastMinDiffPercent !== null ? ` Last min difference: ${lastMinDiffPercent.toFixed(2)}%.` : ""}
-        </p>
       </main>
     </div>
   );

@@ -2,6 +2,33 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
+## Login Route Policy (Unified Entry)
+
+From 2026-02-12 onward, the project uses one shared login entry:
+
+- Primary entry: `/login`
+- Role switch via query:
+  - Staff: `/login?role=staff`
+  - Admin: `/login?role=admin`
+
+Legacy paths are kept for backward compatibility and are internally redirected by router logic:
+
+- `/admin/login` -> `/login?role=admin`
+- `/m/login` -> `/login?role=staff`
+
+Important behavior:
+
+- This is an SPA internal redirect (`history.replaceState`), not an HTTP 301 from server/CDN.
+- Admin protected routes preserve return target using `next` query, e.g. `/login?role=admin&next=/admin/logs`.
+- New features MUST point to `/login` (with `role` query when needed), and MUST NOT introduce new split login pages.
+
+Verification:
+
+1. `npm run dev`
+2. Open `/admin/login` and confirm it becomes `/login?role=admin`
+3. Open `/m/login` and confirm it becomes `/login?role=staff`
+4. Open `/debug/db` without admin session and confirm it redirects to `/login?role=admin&next=/debug/db`
+
 Currently, two official plugins are available:
 
 - [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh

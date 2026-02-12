@@ -267,7 +267,6 @@
   - `npm run build`：Passed
 - 决策影响：
   - 系统已具备 PC/Mobile/Tablet 三端布局骨架，且 Result 页从“纯 message 展示”升级为“可预测状态机视图”。
-
 ## Implementation Update (2026-02-12, Round C9)
 - 目标：先交付 Register MVP 最小闭环（采集 + 活体 + descriptor 落库），与现有移动端框架对齐。
 - 实施：
@@ -282,7 +281,6 @@
   - `npm run build`：Passed
 - 决策影响：
   - 注册链路已可独立跑通，后续可在不改主流程前提下迭代“20 角度质量控制”“更强活体策略”“descriptor 加密落盘”。
-
 ## Implementation Update (2026-02-12, Round C10)
 - 目标：按产品决策移除“动作检测式活体”（转头/眨眼类 challenge），保留无动作活体步骤。
 - 实施：
@@ -294,7 +292,9 @@
   - `npm run build`：Passed
 - 决策影响：
   - 用户侧交互更轻，不再需要执行动作指令；活体强度下降，后续可在不引入动作检测的前提下补静态反欺骗策略。
-## Implementation Update (2026-02-12, Round C20)
-- `/debug/db` 已接入登录门禁：系统完成初始化后，无 session 访问会跳转 `/admin/login`。
-- 角色策略已落地：`SUPER_ADMIN` 可解锁编辑；`ADMIN`（及非 super）强制只读，且不显示编辑解锁控件。
-- 验证通过：`npm run lint`、`npm run build`、Playwright 验证未登录重定向与 `ADMIN` 只读状态均符合预期。
+## Implementation Update (2026-02-12, Round C37)
+- 目标：把 `/m/enroll/capture` 从工程调试观感升级为商业化引导体验。
+- 实施：`FaceGuideOverlay` 改为椭圆导引 + spotlight 遮罩，并保留人脸椭圆边界与 landmarks 轮廓/点位；`EnrollCapturePage` 放大 `currentHint`、压缩状态信息为 chip、将光线/距离改为点状信号，同时将 `Pause/Reset/Continue` 升级为玻璃态按钮。
+- 抓拍反馈：descriptor 数量增长时触发 100ms 白闪（CSS 动画 keyed by count），不引入 effect 内 setState。
+- 验证：`npm run lint` Passed；`npm run build` Passed。
+- 决策影响：20 张自动采集过程的注意力聚焦、成功反馈与专业感明显提升。

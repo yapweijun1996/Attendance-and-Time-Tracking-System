@@ -1,6 +1,17 @@
 export interface FaceApiDetection {
   descriptor: Float32Array;
-  detection: { score: number };
+  detection: {
+    score: number;
+    box: {
+      x: number;
+      y: number;
+      width: number;
+      height: number;
+    };
+  };
+  landmarks: {
+    positions: Array<{ x: number; y: number }>;
+  };
 }
 
 export interface FaceApiRuntime {

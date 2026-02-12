@@ -1,21 +1,25 @@
 import { useCallback, useEffect, useState } from "react";
 
-import type { StaffProfile, StaffStatus } from "../../types/domain";
+import StaffCreateForm from "../components/staff/StaffCreateForm";
+import StaffDeleteDialog from "../components/staff/StaffDeleteDialog";
+import StaffEditDialog from "../components/staff/StaffEditDialog";
+import StaffResetPasswordForm from "../components/staff/StaffResetPasswordForm";
+import StaffTable from "../components/staff/StaffTable";
+import {
+  deleteStaffProfile,
+  exportStaffDeleteBundle,
+  inspectStaffDeleteImpact,
+  updateStaffProfile,
+  type StaffDeleteExportBundle,
+  type StaffDeleteImpact,
+} from "../../services/staff-admin";
 import {
   createStaffProfile,
   listStaffProfiles,
+  resetStaffPassword,
   updateStaffStatus,
 } from "../../services/staff-master";
-
-function statusTone(status: StaffStatus): string {
-  if (status === "ACTIVE") {
-    return "text-emerald-700";
-  }
-  if (status === "LOCKED") {
-    return "text-rose-700";
-  }
-  return "text-amber-700";
-}
+import type { StaffProfile, StaffStatus } from "../../types/domain";
 
 export default function StaffPage() {
   const [staffRows, setStaffRows] = useState<StaffProfile[]>([]);
@@ -24,6 +28,16 @@ export default function StaffPage() {
   const [staffId, setStaffId] = useState("");
   const [name, setName] = useState("");
   const [dept, setDept] = useState("");
+  const [initialPassword, setInitialPassword] = useState("");
+  const [resetStaffId, setResetStaffId] = useState("");
+  const [resetPassword, setResetPassword] = useState("");
+  const [editingStaff, setEditingStaff] = useState<StaffProfile | null>(null);
+  const [deletingStaff, setDeletingStaff] = useState<StaffProfile | null>(null);
+  const [deleteImpact, setDeleteImpact] = useState<StaffDeleteImpact | null>(null);
+  const [deleteImpactLoading, setDeleteImpactLoading] = useState(false);
+  const [deleteImpactError, setDeleteImpactError] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
@@ -53,137 +67,185 @@ export default function StaffPage() {
         staffId,
         name,
         dept,
+        initialPassword,
       });
       setStaffId("");
       setName("");
       setDept("");
-      setSuccessMessage(`Staff ${created.staffId} created. Ask user to bind this ID on mobile Profile.`);
+      setInitialPassword("");
+      setSuccessMessage(`Staff ${created.staffId} created. Share Staff ID + temporary password for first login.`);
       await refreshStaff();
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : "Failed to create staff.");
     } finally {
       setSaving(false);
     }
-  }, [dept, name, refreshStaff, staffId]);
+  }, [dept, initialPassword, name, refreshStaff, staffId]);
 
-  const handleToggleLock = useCallback(
-    async (row: StaffProfile) => {
-      setErrorMessage(null);
-      setSuccessMessage(null);
-      try {
-        const nextStatus: StaffStatus = row.status === "LOCKED" ? "PENDING_ENROLL" : "LOCKED";
-        await updateStaffStatus(row.staffId, nextStatus);
-        setSuccessMessage(`Staff ${row.staffId} updated to ${nextStatus}.`);
-        await refreshStaff();
-      } catch (error) {
-        setErrorMessage(error instanceof Error ? error.message : "Failed to update staff.");
-      }
-    },
-    [refreshStaff]
-  );
+  const handleResetPassword = useCallback(async () => {
+    setSaving(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      const updated = await resetStaffPassword(resetStaffId, resetPassword, true);
+      setResetStaffId("");
+      setResetPassword("");
+      setSuccessMessage(`Password reset for ${updated.staffId}. User must change password at next login.`);
+      await refreshStaff();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to reset password.");
+    } finally {
+      setSaving(false);
+    }
+  }, [refreshStaff, resetPassword, resetStaffId]);
+
+  const handleToggleLock = useCallback(async (row: StaffProfile) => {
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      const nextStatus: StaffStatus = row.status === "LOCKED" ? "PENDING_ENROLL" : "LOCKED";
+      await updateStaffStatus(row.staffId, nextStatus);
+      setSuccessMessage(`Staff ${row.staffId} updated to ${nextStatus}.`);
+      await refreshStaff();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to update staff.");
+    }
+  }, [refreshStaff]);
+
+  const handleEditProfile = useCallback(async (payload: { staffId: string; name: string; dept: string }) => {
+    setEditing(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      const updated = await updateStaffProfile({
+        staffId: payload.staffId,
+        name: payload.name,
+        dept: payload.dept,
+      });
+      setEditingStaff(null);
+      setSuccessMessage(`Staff ${updated.staffId} profile updated.`);
+      await refreshStaff();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to update staff profile.");
+      throw error;
+    } finally {
+      setEditing(false);
+    }
+  }, [refreshStaff]);
+
+  const handleDeleteStaff = useCallback(async (staffIdToDelete: string) => {
+    setDeleting(true);
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    try {
+      await deleteStaffProfile(staffIdToDelete);
+      setDeletingStaff(null);
+      setSuccessMessage(`Staff ${staffIdToDelete} deleted.`);
+      await refreshStaff();
+    } catch (error) {
+      setErrorMessage(error instanceof Error ? error.message : "Failed to delete staff.");
+      throw error;
+    } finally {
+      setDeleting(false);
+    }
+  }, [refreshStaff]);
+
+  const handleOpenDeleteDialog = useCallback(async (row: StaffProfile) => {
+    setDeletingStaff(row);
+    setDeleteImpact(null);
+    setDeleteImpactError(null);
+    setDeleteImpactLoading(true);
+    try {
+      const impact = await inspectStaffDeleteImpact(row.staffId);
+      setDeleteImpact(impact);
+    } catch (error) {
+      setDeleteImpactError(error instanceof Error ? error.message : "Failed to inspect related records.");
+    } finally {
+      setDeleteImpactLoading(false);
+    }
+  }, []);
+
+  const handleCloseDeleteDialog = useCallback(() => {
+    setDeletingStaff(null);
+    setDeleteImpact(null);
+    setDeleteImpactError(null);
+    setDeleteImpactLoading(false);
+  }, []);
+
+  const handleExportDeleteBundle = useCallback(async (staffIdToExport: string): Promise<StaffDeleteExportBundle> => {
+    return exportStaffDeleteBundle(staffIdToExport);
+  }, []);
 
   return (
     <div className="space-y-4">
       <section className="ui-card p-4">
         <h2 className="ui-title text-sm">Staff Master</h2>
         <p className="ui-note mt-1">
-          Create staff records here, then bind staff ID on mobile Profile before enrollment.
+          Create staff credentials here. Staff must sign in with Staff ID + password on mobile.
         </p>
         {errorMessage ? <p className="ui-note-error mt-2">{errorMessage}</p> : null}
         {successMessage ? <p className="ui-note mt-2 text-emerald-700">{successMessage}</p> : null}
       </section>
 
-      <section className="ui-card p-4">
-        <h3 className="ui-title text-sm">Create Staff</h3>
-        <div className="mt-3 grid gap-3 sm:grid-cols-3">
-          <label className="text-sm text-slate-700">
-            Staff ID
-            <input
-              value={staffId}
-              onChange={(event) => setStaffId(event.target.value.toUpperCase())}
-              className="ui-input"
-              placeholder="STAFF_001"
-            />
-          </label>
-          <label className="text-sm text-slate-700">
-            Name
-            <input
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              className="ui-input"
-              placeholder="Jane Tan"
-            />
-          </label>
-          <label className="text-sm text-slate-700">
-            Department
-            <input
-              value={dept}
-              onChange={(event) => setDept(event.target.value)}
-              className="ui-input"
-              placeholder="Operations"
-            />
-          </label>
-        </div>
-        <button
-          type="button"
-          onClick={() => {
-            void handleCreateStaff();
-          }}
-          disabled={saving}
-          className="ui-btn ui-btn-primary mt-4 disabled:cursor-not-allowed disabled:opacity-60"
-        >
-          {saving ? "Saving..." : "Create Staff"}
-        </button>
-      </section>
+      <StaffCreateForm
+        staffId={staffId}
+        name={name}
+        dept={dept}
+        initialPassword={initialPassword}
+        saving={saving}
+        onStaffIdChange={setStaffId}
+        onNameChange={setName}
+        onDeptChange={setDept}
+        onInitialPasswordChange={setInitialPassword}
+        onSubmit={() => {
+          void handleCreateStaff();
+        }}
+      />
 
-      <section className="ui-table-shell">
-        <table className="ui-table">
-          <thead className="ui-thead">
-            <tr>
-              <th className="ui-th">Staff ID</th>
-              <th className="ui-th">Name</th>
-              <th className="ui-th">Dept</th>
-              <th className="ui-th">Status</th>
-              <th className="ui-th">Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr className="ui-row">
-                <td className="ui-td text-slate-500" colSpan={5}>
-                  Loading staff...
-                </td>
-              </tr>
-            ) : staffRows.length === 0 ? (
-              <tr className="ui-row">
-                <td className="ui-td text-slate-500" colSpan={5}>
-                  No staff records yet.
-                </td>
-              </tr>
-            ) : (
-              staffRows.map((row) => (
-                <tr key={row._id} className="ui-row">
-                  <td className="ui-td font-mono text-xs text-slate-600">{row.staffId}</td>
-                  <td className="ui-td font-semibold text-slate-900">{row.name}</td>
-                  <td className="ui-td text-slate-700">{row.dept ?? "-"}</td>
-                  <td className={`ui-td font-semibold ${statusTone(row.status)}`}>{row.status}</td>
-                  <td className="ui-td">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void handleToggleLock(row);
-                      }}
-                      className="ui-btn ui-btn-ghost min-h-0 px-3 py-1.5 text-xs"
-                    >
-                      {row.status === "LOCKED" ? "Unlock" : "Lock"}
-                    </button>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </section>
+      <StaffResetPasswordForm
+        staffId={resetStaffId}
+        resetPassword={resetPassword}
+        saving={saving}
+        onStaffIdChange={setResetStaffId}
+        onResetPasswordChange={setResetPassword}
+        onSubmit={() => {
+          void handleResetPassword();
+        }}
+      />
+
+      <StaffTable
+        rows={staffRows}
+        loading={loading}
+        onEdit={(row) => {
+          setEditingStaff(row);
+        }}
+        onToggleLock={(row) => {
+          void handleToggleLock(row);
+        }}
+        onDelete={(row) => {
+          void handleOpenDeleteDialog(row);
+        }}
+      />
+
+      <StaffEditDialog
+        key={editingStaff?.staffId ?? "no-staff"}
+        staff={editingStaff}
+        saving={editing}
+        onClose={() => setEditingStaff(null)}
+        onSubmit={handleEditProfile}
+      />
+
+      <StaffDeleteDialog
+        key={deletingStaff?.staffId ?? "no-delete"}
+        staff={deletingStaff}
+        deleting={deleting}
+        impact={deleteImpact}
+        impactLoading={deleteImpactLoading}
+        impactError={deleteImpactError}
+        onClose={handleCloseDeleteDialog}
+        onExport={handleExportDeleteBundle}
+        onConfirm={handleDeleteStaff}
+      />
     </div>
   );
 }

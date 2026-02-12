@@ -1,6 +1,8 @@
 import { navigateTo } from "../shared/navigation";
 
 export const MOBILE_ROUTES = [
+  "/m/login",
+  "/m/change-password",
   "/m/home",
   "/m/verify",
   "/m/result",

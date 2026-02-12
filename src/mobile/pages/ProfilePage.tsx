@@ -17,6 +17,7 @@ interface ProfilePageProps {
   onStartEnrollment: () => void;
   onBindStaff: (staffId: string) => void;
   onClearStaffBinding: () => void;
+  onLogout: () => void;
   onNavigate: (route: MobileRoute) => void;
 }
 
@@ -32,6 +33,7 @@ export default function ProfilePage({
   onStartEnrollment,
   onBindStaff,
   onClearStaffBinding,
+  onLogout,
   onNavigate,
 }: ProfilePageProps) {
   const [staffIdInput, setStaffIdInput] = useState(staffId ?? "");
@@ -81,13 +83,22 @@ export default function ProfilePage({
                   <p className="text-xs font-bold text-slate-500 text-center">
                     Current Status: <span className={staffBound ? "text-emerald-600" : "text-amber-600"}>{staffBound ? "Successfully Linked" : "No Account Bound"}</span>
                   </p>
-                  <button
-                    type="button"
-                    onClick={onClearStaffBinding}
-                    className="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors py-2"
-                  >
-                    Remove Current Link
-                  </button>
+                  <div className="flex items-center justify-center gap-3">
+                    <button
+                      type="button"
+                      onClick={onClearStaffBinding}
+                      className="text-xs font-bold text-slate-400 hover:text-red-500 transition-colors py-2"
+                    >
+                      Remove Current Link
+                    </button>
+                    <button
+                      type="button"
+                      onClick={onLogout}
+                      className="text-xs font-bold text-slate-400 hover:text-amber-600 transition-colors py-2"
+                    >
+                      Logout
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

@@ -3,6 +3,9 @@ import { useEffect, useRef, useState } from "react";
 interface LiveCameraProps {
   facingMode?: "user" | "environment";
   className?: string;
+  videoClassName?: string;
+  showStatusText?: boolean;
+  statusClassName?: string;
   onReady?: (videoElement: HTMLVideoElement) => void;
   onError?: (error: Error) => void;
 }
@@ -10,19 +13,30 @@ interface LiveCameraProps {
 export default function LiveCamera({
   facingMode = "user",
   className,
+  videoClassName,
+  showStatusText = true,
+  statusClassName,
   onReady,
   onError,
 }: LiveCameraProps) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const onReadyRef = useRef(onReady);
+  const onErrorRef = useRef(onError);
   const [ready, setReady] = useState(false);
+
+  // Keep latest callbacks without forcing camera stream restart on every parent render.
+  useEffect(() => {
+    onReadyRef.current = onReady;
+    onErrorRef.current = onError;
+  }, [onError, onReady]);
 
   useEffect(() => {
     let mounted = true;
 
     const start = async () => {
       if (!navigator.mediaDevices?.getUserMedia) {
-        onError?.(new Error("This browser does not support camera access."));
+        onErrorRef.current?.(new Error("This browser does not support camera access."));
         return;
       }
 
@@ -54,11 +68,11 @@ export default function LiveCamera({
         }
 
         setReady(true);
-        onReady?.(videoRef.current);
+        onReadyRef.current?.(videoRef.current);
       } catch (error) {
         const message =
           error instanceof Error ? error : new Error("Unable to access camera.");
-        onError?.(message);
+        onErrorRef.current?.(message);
       }
     };
 
@@ -70,7 +84,7 @@ export default function LiveCamera({
       streamRef.current = null;
       setReady(false);
     };
-  }, [facingMode, onError, onReady]);
+  }, [facingMode]);
 
   return (
     <div className={className}>
@@ -79,9 +93,13 @@ export default function LiveCamera({
         autoPlay
         muted
         playsInline
-        className="w-full rounded-xl bg-slate-950"
+        className={videoClassName ?? "w-full rounded-xl bg-slate-950"}
       />
-      <p className="mt-2 text-xs text-slate-600">{ready ? "Camera ready" : "Starting camera..."}</p>
+      {showStatusText ? (
+        <p className={statusClassName ?? "mt-2 text-xs text-slate-600"}>
+          {ready ? "Camera ready" : "Starting camera..."}
+        </p>
+      ) : null}
     </div>
   );
 }

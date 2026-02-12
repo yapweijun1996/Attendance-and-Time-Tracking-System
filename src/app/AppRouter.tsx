@@ -5,19 +5,46 @@ import MobileApp from "../mobile/MobileApp";
 import { clearAdminSession, readAdminSession, type AdminSession } from "../services/admin-auth";
 import { hasSystemAdmin } from "../services/system-admin";
 import DebugDatabasePage from "./pages/DebugDatabasePage";
-import AdminLoginPage from "./pages/AdminLoginPage";
 import DebugHealthPage from "./pages/DebugHealthPage";
 import LandingPage from "./pages/LandingPage";
+import LoginPage from "./pages/LoginPage";
 import SetupAdminPage from "./pages/SetupAdminPage";
 import { navigateTo, readLocationState } from "../shared/navigation";
 
 type SetupStatus = "required" | "ready";
 const BOOTSTRAP_CHECK_TIMEOUT_MS = 12000;
+const LOGIN_PATH = "/login";
 const ADMIN_LOGIN_PATH = "/admin/login";
+const STAFF_LOGIN_PATH = "/m/login";
 const ADMIN_HOME_PATH = "/admin/logs";
 const DEBUG_HEALTH_PATH = "/debug/health";
 const DEBUG_DB_PATH = "/debug/db";
 const SESSION_RECHECK_INTERVAL_MS = 30_000;
+
+type LoginRole = "staff" | "admin";
+
+function buildLoginPath(role: LoginRole, nextPath?: string): string {
+  const params = new URLSearchParams();
+  params.set("role", role);
+  if (nextPath && nextPath.startsWith("/") && !nextPath.startsWith("//")) {
+    params.set("next", nextPath);
+  }
+  return `${LOGIN_PATH}?${params.toString()}`;
+}
+
+function parseLoginRole(search: string): LoginRole {
+  const params = new URLSearchParams(search);
+  return params.get("role") === "admin" ? "admin" : "staff";
+}
+
+function parseLoginNext(search: string): string | null {
+  const params = new URLSearchParams(search);
+  const value = params.get("next");
+  if (!value || !value.startsWith("/") || value.startsWith("//")) {
+    return null;
+  }
+  return value;
+}
 
 function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
   return new Promise<T>((resolve, reject) => {
@@ -114,12 +141,22 @@ export default function AppRouter() {
     }
 
     if (locationState.pathname.startsWith("/setup/admin")) {
-      navigateTo(adminSession ? ADMIN_HOME_PATH : ADMIN_LOGIN_PATH, true);
+      navigateTo(adminSession ? ADMIN_HOME_PATH : buildLoginPath("admin"), true);
+      return;
+    }
+
+    if (locationState.pathname === ADMIN_LOGIN_PATH) {
+      navigateTo(buildLoginPath("admin"), true);
+      return;
+    }
+
+    if (locationState.pathname === STAFF_LOGIN_PATH) {
+      navigateTo(buildLoginPath("staff"), true);
       return;
     }
 
     if (locationState.pathname === DEBUG_DB_PATH && !adminSession) {
-      navigateTo(ADMIN_LOGIN_PATH, true);
+      navigateTo(buildLoginPath("admin", DEBUG_DB_PATH), true);
       return;
     }
 
@@ -128,14 +165,14 @@ export default function AppRouter() {
     }
 
     if (!adminSession && locationState.pathname !== ADMIN_LOGIN_PATH) {
-      navigateTo(ADMIN_LOGIN_PATH, true);
+      navigateTo(buildLoginPath("admin", `${locationState.pathname}${locationState.search}`), true);
       return;
     }
 
     if (adminSession && locationState.pathname === ADMIN_LOGIN_PATH) {
       navigateTo(ADMIN_HOME_PATH, true);
     }
-  }, [adminSession, locationState.pathname, setupStatus]);
+  }, [adminSession, locationState.pathname, locationState.search, setupStatus]);
 
   const handleSetupCompleted = useCallback((session: AdminSession) => {
     setSetupStatus("ready");
@@ -144,15 +181,15 @@ export default function AppRouter() {
     navigateTo(ADMIN_HOME_PATH, true);
   }, []);
 
-  const handleLoginSuccess = useCallback((session: AdminSession) => {
+  const handleLoginSuccess = useCallback((session: AdminSession, targetPath: string) => {
     setAdminSession(session);
-    navigateTo(ADMIN_HOME_PATH, true);
+    navigateTo(targetPath, true);
   }, []);
 
   const handleAdminLogout = useCallback(() => {
     clearAdminSession();
     setAdminSession(null);
-    navigateTo(ADMIN_LOGIN_PATH, true);
+    navigateTo(buildLoginPath("admin"), true);
   }, []);
 
   if (setupStatus === "required") {
@@ -188,14 +225,36 @@ export default function AppRouter() {
   }
   if (locationState.pathname === DEBUG_DB_PATH) {
     if (!adminSession) {
-      return <AdminLoginPage onLoginSuccess={handleLoginSuccess} />;
+      return (
+        <LoginPage
+          preferredRole="admin"
+          adminNextPath={DEBUG_DB_PATH}
+          onAdminLoginSuccess={handleLoginSuccess}
+        />
+      );
     }
     return <DebugDatabasePage adminSession={adminSession} />;
   }
 
+  if (locationState.pathname === LOGIN_PATH) {
+    return (
+      <LoginPage
+        preferredRole={parseLoginRole(locationState.search)}
+        adminNextPath={parseLoginNext(locationState.search)}
+        onAdminLoginSuccess={handleLoginSuccess}
+      />
+    );
+  }
+
   if (locationState.pathname.startsWith("/admin")) {
     if (!adminSession || locationState.pathname === ADMIN_LOGIN_PATH) {
-      return <AdminLoginPage onLoginSuccess={handleLoginSuccess} />;
+      return (
+        <LoginPage
+          preferredRole="admin"
+          adminNextPath={`${locationState.pathname}${locationState.search}`}
+          onAdminLoginSuccess={handleLoginSuccess}
+        />
+      );
     }
     return <AdminApp onLogout={handleAdminLogout} />;
   }

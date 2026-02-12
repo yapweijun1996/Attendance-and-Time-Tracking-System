@@ -50,6 +50,12 @@ export interface UserProfile extends DocMeta {
 
 export type StaffStatus = "PENDING_ENROLL" | "ACTIVE" | "LOCKED";
 
+export interface StaffCredentials {
+  passwordHash: string;
+  mustChangePassword: boolean;
+  passwordChangedAt?: ISODateTimeString;
+}
+
 export interface StaffProfile extends DocMeta {
   type: "STAFF";
   orgId: string;
@@ -57,6 +63,7 @@ export interface StaffProfile extends DocMeta {
   name: string;
   dept?: string;
   status: StaffStatus;
+  credentials?: StaffCredentials;
   createdAt: ISODateTimeString;
   updatedAt: ISODateTimeString;
 }

@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import LiveCamera from "../../components/Camera/LiveCamera";
 import type { FaceModelLoadProgress } from "../../services/face";
 import { saveEnrollmentProfile } from "../services/enrollment";
+import { clearEnrollmentDraft, readEnrollmentDraft } from "../services/enrollment-draft";
 
 const PASSIVE_LIVENESS_MIN_SCORE = 0.65;
 
@@ -23,6 +24,11 @@ export default function EnrollLivenessPage({
   onRestart,
   onSaved,
 }: EnrollLivenessPageProps) {
+  const [bootDraft] = useState(() => readEnrollmentDraft());
+  const effectiveConsentAcceptedAt = consentAcceptedAt ?? bootDraft.consentAcceptedAt;
+  const effectiveDescriptors = descriptors.length > 0 ? descriptors : bootDraft.descriptors;
+  const effectivePhotos = photos.length > 0 ? photos : bootDraft.photos;
+
   const [modelPercent, setModelPercent] = useState(0);
   const [modelReady, setModelReady] = useState(false);
   const [modelLoading, setModelLoading] = useState(true);
@@ -105,15 +111,15 @@ export default function EnrollLivenessPage({
   }, [cameraReady, checkBusy, modelReady, videoElement]);
 
   const handleSave = useCallback(async () => {
-    if (!consentAcceptedAt) {
+    if (!effectiveConsentAcceptedAt) {
       setSaveError("Consent timestamp is missing. Restart enrollment.");
       return;
     }
-    if (descriptors.length === 0) {
+    if (effectiveDescriptors.length === 0) {
       setSaveError("No descriptors captured. Restart enrollment.");
       return;
     }
-    if (photos.length === 0) {
+    if (effectivePhotos.length === 0) {
       setSaveError("No enrollment photos captured. Restart enrollment.");
       return;
     }
@@ -126,9 +132,9 @@ export default function EnrollLivenessPage({
     setSaveError(null);
     try {
       const profile = await saveEnrollmentProfile({
-        descriptors,
-        photos,
-        consentAcceptedAt,
+        descriptors: effectiveDescriptors,
+        photos: effectivePhotos,
+        consentAcceptedAt: effectiveConsentAcceptedAt,
         liveness: {
           mode: "PASSIVE_SCORE",
           passedAt: livenessPassedAt,
@@ -146,15 +152,23 @@ export default function EnrollLivenessPage({
         },
       ]);
 
-      onSaved(`Enrollment saved (${profile.faceDescriptors.length} descriptors, ${photos.length} photos).`);
+      clearEnrollmentDraft();
+      onSaved(`Enrollment saved (${profile.faceDescriptors.length} descriptors, ${effectivePhotos.length} photos).`);
     } catch (error) {
       setSaveError(error instanceof Error ? error.message : "Failed to save enrollment profile.");
     } finally {
       setSaving(false);
     }
-  }, [consentAcceptedAt, descriptors, livenessPassedAt, livenessScore, onSaved, photos]);
+  }, [
+    effectiveConsentAcceptedAt,
+    effectiveDescriptors,
+    effectivePhotos,
+    livenessPassedAt,
+    livenessScore,
+    onSaved,
+  ]);
 
-  if (!consentAcceptedAt || descriptors.length === 0 || photos.length === 0) {
+  if (!effectiveConsentAcceptedAt || effectiveDescriptors.length === 0 || effectivePhotos.length === 0) {
     return (
       <div className="ui-page-flow">
         <main className="ui-main-flow">
