@@ -293,8 +293,8 @@
 - 决策影响：
   - 用户侧交互更轻，不再需要执行动作指令；活体强度下降，后续可在不引入动作检测的前提下补静态反欺骗策略。
 ## Implementation Update (2026-02-12, Round C37)
-- 目标：把 `/m/enroll/capture` 从工程调试观感升级为商业化引导体验。
-- 实施：`FaceGuideOverlay` 改为椭圆导引 + spotlight 遮罩，并保留人脸椭圆边界与 landmarks 轮廓/点位；`EnrollCapturePage` 放大 `currentHint`、压缩状态信息为 chip、将光线/距离改为点状信号，同时将 `Pause/Reset/Continue` 升级为玻璃态按钮。
-- 抓拍反馈：descriptor 数量增长时触发 100ms 白闪（CSS 动画 keyed by count），不引入 effect 内 setState。
+- 目标：把 `/m/enroll/capture` 提升为更稳健的生产化采集流程（串行加载 + 全屏预览控制 + Anti-Blur + 遮挡拦截）。
+- 实施：相机改为模型 ready 后才启动并显示 loader/15 秒慢网提示；照片预览改全屏 modal，预览开启自动暂停采集、关闭后自动恢复；新增 `src/mobile/utils/sharpness.ts`（Laplacian Variance）做模糊拦截，并在 `src/mobile/utils/face-visibility.ts` + `src/mobile/utils/visibility-image-checks.ts` 收紧 mouth/eye 几何阈值、增加下半脸（口罩）与眼区像素拦截，手遮挡口鼻/眼睛或戴口罩时直接阻断入库，同时加入首帧 anchor 同人距离上限校验防止多人混采。
+- UI：顶部状态胶囊分离（`[status][progress]`），移除冗余提示块；底部显示“环境：正常/模糊 + sharpness score”，并在连续模糊时给出中心黄色提示。
 - 验证：`npm run lint` Passed；`npm run build` Passed。
-- 决策影响：20 张自动采集过程的注意力聚焦、成功反馈与专业感明显提升。
+- 决策影响：在弱网/抖动/遮挡场景下，采集质量更可控，20 张入库样本稳定性提升且用户反馈更明确。

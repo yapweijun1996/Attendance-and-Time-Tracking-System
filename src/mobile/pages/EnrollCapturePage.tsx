@@ -15,6 +15,9 @@ interface EnrollCapturePageProps {
 }
 
 function statePillClass(state: string): string {
+  if (state === "BLURRY") {
+    return "border-amber-300/40 bg-amber-400/20 text-amber-100";
+  }
   if (state === "TOO_SIMILAR") {
     return "border-amber-300/35 bg-amber-400/15 text-amber-100";
   }
@@ -105,6 +108,11 @@ export default function EnrollCapturePage(props: EnrollCapturePageProps) {
           }
         }
       `}</style>
+      {flow.captureState === "BLURRY" && flow.blurFrameStreak >= 3 ? (
+        <div className="pointer-events-none absolute left-1/2 top-[32%] z-40 -translate-x-1/2 rounded-xl border border-amber-200/40 bg-amber-500/20 px-3 py-1.5 text-xs font-semibold text-amber-100 backdrop-blur-sm">
+          画面模糊，请稳定手机
+        </div>
+      ) : null}
 
       <main className="relative z-20 flex min-h-screen flex-col p-3 sm:p-5">
         <header className="pointer-events-auto flex items-center justify-between gap-3">
@@ -153,6 +161,17 @@ export default function EnrollCapturePage(props: EnrollCapturePageProps) {
                 ? ` Last min difference: ${flow.lastMinDiffPercent.toFixed(2)}%.`
                 : ""}
             </p>
+            <p
+              className={`mt-1 text-[10px] font-semibold ${
+                flow.blurStatus === "BLURRY" ? "text-amber-200" : "text-emerald-200"
+              }`}
+            >
+              环境：{flow.blurStatus === "BLURRY" ? "模糊" : "正常"}
+              {flow.lastSharpnessScore !== null ? `（Sharpness ${flow.lastSharpnessScore.toFixed(1)}）` : ""}
+            </p>
+            {flow.captureState === "BLURRY" ? (
+              <p className="mt-1 text-[10px] font-semibold text-amber-100">{flow.captureHint}</p>
+            ) : null}
             {canContinue ? (
               <p className="mt-1 text-[10px] font-semibold text-emerald-200">
                 Target reached. Moving to next step...

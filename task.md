@@ -286,14 +286,15 @@
   - `npm run build` passed.
 
 ## Follow-up Log (2026-02-12, Round C37)
-- Scope: Upgrade `/m/enroll/capture` from engineering-style diagnostics to product-grade visual guidance.
+- Scope: Harden `/m/enroll/capture` for production enrollment quality and clearer runtime behavior.
 - Completed:
-  - `src/mobile/components/enrollment/FaceGuideOverlay.tsx`: replaced rectangle guide with center oval guide, added spotlight dim mask, kept detected face ellipse + landmark contour/points for visible tracking feedback.
-  - `src/mobile/pages/EnrollCapturePage.tsx`: redesigned info hierarchy with larger `currentHint`, compact state chip, and icon-like light/distance signals.
-  - Added shutter-like capture feedback (100ms white flash) via CSS animation keyed by descriptor count, avoiding extra runtime pressure.
-  - Upgraded action controls (`Pause/Reset/Continue`) to stronger glassmorphism style (blur + bright border) while keeping mobile-safe touch sizes.
+  - Enforced serial startup: model must be ready before camera mount; added waiting loader and 15s slow-network hint.
+  - Upgraded captured-photo preview to fullscreen modal and wired auto pause/resume for auto-capture during preview.
+  - Added anti-blur gate (`src/mobile/utils/sharpness.ts`, Laplacian variance): dynamic threshold by light level, `BLURRY` state, blur-score debug output in dev, vibration on 3+ consecutive blurry frames, plus anchor same-person distance guard.
+  - Added stricter occlusion gate (`src/mobile/utils/face-visibility.ts`, `src/mobile/utils/visibility-image-checks.ts`): tighter mouth/eye geometry checks with lower-face and eye-region pixel checks to block hand-over-face/mask frames before descriptor/photo write.
+  - Simplified capture HUD and controls: split `[status][progress]` pills, removed low-value prompt text, dropped manual Continue button, and auto-advance to next step at target count.
 - Verification:
   - `npm run lint` passed.
   - `npm run build` passed.
 - Expected Outcome:
-  - Capture focus is clearer, operator confidence improves during 20-shot auto enrollment, and UI is closer to production product quality.
+  - Blurry/occluded/mixed-identity frames are blocked from enrollment, capture flow is less error-prone under weak network/motion, and operator feedback is immediate.

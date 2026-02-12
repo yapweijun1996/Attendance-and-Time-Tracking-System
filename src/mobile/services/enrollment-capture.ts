@@ -2,6 +2,11 @@ export const ENROLL_CAPTURE_TARGET = 20;
 export const ENROLL_AUTO_CAPTURE_INTERVAL_MS = 600;
 export const ENROLL_MIN_DETECTION_SCORE = 0.55;
 export const ENROLL_MIN_DESCRIPTOR_DIFF_PERCENT = 15;
+export const ENROLL_SAME_PERSON_MAX_DISTANCE = 0.58;
+export const ENROLL_SAME_PERSON_MAX_DISTANCE_PERCENT = ENROLL_SAME_PERSON_MAX_DISTANCE * 100;
+// Raw Laplacian variance threshold (non-normalized). Calibrated to reduce over-blocking.
+export const ENROLL_BLUR_THRESHOLD_BASE = 2200;
+export const ENROLL_BLUR_STREAK_ALERT_COUNT = 3;
 export const ENROLL_CAPTURE_HINTS = [
   "Face Forward",
   "Turn Left",
@@ -13,6 +18,7 @@ export const ENROLL_CAPTURE_HINTS = [
 export type CaptureFlowState =
   | "SCANNING"
   | "LOW_CONFIDENCE"
+  | "BLURRY"
   | "TOO_SIMILAR"
   | "CAPTURED"
   | "COMPLETED";
@@ -97,6 +103,16 @@ export function buildCaptureDiagnostics(signal: CaptureFrameSignal): CaptureDiag
     distanceLevel: distance.level,
     distanceMessage: distance.message,
   };
+}
+
+export function resolveBlurThreshold(lightLevel: CaptureSignalLevel): number {
+  if (lightLevel === "CRITICAL") {
+    return ENROLL_BLUR_THRESHOLD_BASE * 0.6;
+  }
+  if (lightLevel === "WARN") {
+    return ENROLL_BLUR_THRESHOLD_BASE * 0.8;
+  }
+  return ENROLL_BLUR_THRESHOLD_BASE;
 }
 
 export function createDefaultCaptureDiagnostics(): CaptureDiagnostics {
