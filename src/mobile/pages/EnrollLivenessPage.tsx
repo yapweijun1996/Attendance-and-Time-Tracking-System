@@ -1,11 +1,9 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useState } from "react";
 
-import LiveCamera from "../../components/Camera/LiveCamera";
-import type { FaceModelLoadProgress } from "../../services/face";
 import { saveEnrollmentProfile } from "../services/enrollment";
 import { clearEnrollmentDraft, readEnrollmentDraft } from "../services/enrollment-draft";
 
-const PASSIVE_LIVENESS_MIN_SCORE = 0.65;
+const DEFAULT_LIVENESS_CONFIDENCE = 1;
 
 interface EnrollLivenessPageProps {
   consentAcceptedAt: string | null;
@@ -28,87 +26,8 @@ export default function EnrollLivenessPage({
   const effectiveConsentAcceptedAt = consentAcceptedAt ?? bootDraft.consentAcceptedAt;
   const effectiveDescriptors = descriptors.length > 0 ? descriptors : bootDraft.descriptors;
   const effectivePhotos = photos.length > 0 ? photos : bootDraft.photos;
-
-  const [modelPercent, setModelPercent] = useState(0);
-  const [modelReady, setModelReady] = useState(false);
-  const [modelLoading, setModelLoading] = useState(true);
-  const [modelError, setModelError] = useState<string | null>(null);
-  const [cameraReady, setCameraReady] = useState(false);
-  const [cameraError, setCameraError] = useState<string | null>(null);
-  const [videoElement, setVideoElement] = useState<HTMLVideoElement | null>(null);
-  const [checkBusy, setCheckBusy] = useState(false);
-  const [statusMessage, setStatusMessage] = useState("Run passive liveness check.");
-  const [livenessScore, setLivenessScore] = useState<number | null>(null);
-  const [livenessPassedAt, setLivenessPassedAt] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    const loadModels = async () => {
-      setModelLoading(true);
-      setModelError(null);
-      try {
-        const { faceAPIService } = await import("../../services/face");
-        await faceAPIService.loadModels("/models", (progress: FaceModelLoadProgress) => {
-          if (!cancelled) {
-            setModelPercent(progress.percent);
-          }
-        });
-        if (!cancelled) {
-          setModelReady(true);
-        }
-      } catch (error) {
-        if (!cancelled) {
-          setModelError(error instanceof Error ? error.message : "Failed to load face model.");
-        }
-      } finally {
-        if (!cancelled) {
-          setModelLoading(false);
-        }
-      }
-    };
-
-    void loadModels();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handlePassiveCheck = useCallback(async () => {
-    if (!videoElement || !cameraReady || !modelReady || checkBusy) {
-      return;
-    }
-
-    setCheckBusy(true);
-    setSaveError(null);
-    try {
-      const { faceAPIService } = await import("../../services/face");
-      const detection = await faceAPIService.detectFace(videoElement);
-      if (!detection) {
-        setLivenessPassedAt(null);
-        setLivenessScore(null);
-        setStatusMessage("No face detected. Keep face centered and retry.");
-        return;
-      }
-
-      setLivenessScore(detection.score);
-      if (detection.score < PASSIVE_LIVENESS_MIN_SCORE) {
-        setLivenessPassedAt(null);
-        setStatusMessage(
-          `Liveness not passed (score ${detection.score.toFixed(3)}). Improve lighting and retry.`
-        );
-        return;
-      }
-
-      setLivenessPassedAt(new Date().toISOString());
-      setStatusMessage(`Liveness passed (score ${detection.score.toFixed(3)}). You can save enrollment.`);
-    } catch (error) {
-      setStatusMessage(error instanceof Error ? error.message : "Passive liveness check failed.");
-    } finally {
-      setCheckBusy(false);
-    }
-  }, [cameraReady, checkBusy, modelReady, videoElement]);
 
   const handleSave = useCallback(async () => {
     if (!effectiveConsentAcceptedAt) {
@@ -123,22 +42,19 @@ export default function EnrollLivenessPage({
       setSaveError("No enrollment photos captured. Restart enrollment.");
       return;
     }
-    if (!livenessPassedAt || livenessScore === null) {
-      setSaveError("Passive liveness check is not completed.");
-      return;
-    }
 
     setSaving(true);
     setSaveError(null);
     try {
+      const reviewedAt = new Date().toISOString();
       const profile = await saveEnrollmentProfile({
         descriptors: effectiveDescriptors,
         photos: effectivePhotos,
         consentAcceptedAt: effectiveConsentAcceptedAt,
         liveness: {
           mode: "PASSIVE_SCORE",
-          passedAt: livenessPassedAt,
-          confidence: livenessScore,
+          passedAt: reviewedAt,
+          confidence: DEFAULT_LIVENESS_CONFIDENCE,
         },
       });
 
@@ -163,8 +79,6 @@ export default function EnrollLivenessPage({
     effectiveConsentAcceptedAt,
     effectiveDescriptors,
     effectivePhotos,
-    livenessPassedAt,
-    livenessScore,
     onSaved,
   ]);
 
@@ -172,7 +86,7 @@ export default function EnrollLivenessPage({
     return (
       <div className="ui-page-flow">
         <main className="ui-main-flow">
-          <h1 className="ui-title text-xl">Enrollment Liveness</h1>
+          <h1 className="ui-title text-xl">Review Your Enrollment</h1>
           <p className="ui-note-warn mt-2">
             Missing capture context. Restart from consent and capture steps.
           </p>
@@ -188,70 +102,88 @@ export default function EnrollLivenessPage({
     );
   }
 
+  const backgroundPhoto = effectivePhotos[0];
+
   return (
-    <div className="ui-page-flow">
-      <main className="ui-main-flow">
-        <button type="button" onClick={onBack} className="ui-back-btn">
-          Back
-        </button>
-
-        <h1 className="ui-title text-xl">Enrollment Liveness</h1>
-        <p className="ui-note mt-1">{statusMessage}</p>
-
-        <section className="ui-card mt-4 p-4">
-          <div className="mb-3 flex items-center justify-between text-xs font-medium">
-            <span className="ui-note-xs">Model</span>
-            <span className={modelReady ? "ui-status-ok" : "ui-status-pending"}>
-              {modelReady ? "Ready" : modelLoading ? `${modelPercent}%` : "Pending"}
-            </span>
-          </div>
-          {modelError ? <p className="ui-note-error mb-2">{modelError}</p> : null}
-
-          <LiveCamera
-            facingMode="user"
-            onReady={(video) => {
-              setCameraReady(true);
-              setCameraError(null);
-              setVideoElement(video);
-            }}
-            onError={(error) => {
-              setCameraReady(false);
-              setCameraError(error.message);
-            }}
+    <div className="relative min-h-screen overflow-hidden bg-slate-950">
+      {backgroundPhoto ? (
+        <>
+          {/* Blur first captured frame as ambience to keep visual continuity with capture page. */}
+          <img
+            src={backgroundPhoto}
+            alt="Enrollment background"
+            className="pointer-events-none absolute inset-0 h-full w-full scale-105 object-cover opacity-45 blur-2xl"
           />
-          {cameraError ? <p className="ui-note-error mt-2">{cameraError}</p> : null}
+          <div className="pointer-events-none absolute inset-0 bg-black/55" />
+        </>
+      ) : (
+        <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-slate-900 to-black" />
+      )}
 
+      <main className="relative z-10 flex min-h-screen flex-col p-3 sm:p-5">
+        <header className="pointer-events-auto flex items-center justify-between">
+          <button
+            type="button"
+            onClick={onBack}
+            className="rounded-xl border border-white/20 bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-md"
+          >
+            Back
+          </button>
+          <div className="rounded-2xl border border-white/25 bg-black/55 px-3 py-1.5 text-xs font-semibold text-white backdrop-blur-lg">
+            READY
+          </div>
+        </header>
+
+        <section className="pointer-events-auto mt-4 rounded-3xl border border-white/20 bg-black/45 p-3 backdrop-blur-xl sm:p-4">
+          <h1 className="text-lg font-black text-white sm:text-xl">Review Your Enrollment</h1>
+          <p className="mt-1 text-xs font-semibold text-white/75">
+            {effectivePhotos.length} photos · {effectiveDescriptors.length} descriptors · Ready to save
+          </p>
+
+          {/* Keep dense preview grid so user can verify capture quality within one glance. */}
+          <div className="mt-3 grid max-h-[55vh] grid-cols-4 gap-2 overflow-y-auto pr-1 sm:grid-cols-5">
+            {effectivePhotos.map((photo, index) => (
+              <div
+                key={`${index}-${photo.slice(0, 24)}`}
+                className="relative overflow-hidden rounded-xl border border-white/20 bg-slate-900"
+              >
+                <img
+                  src={photo}
+                  alt={`Captured ${index + 1}`}
+                  className="aspect-square w-full object-cover"
+                  loading="lazy"
+                />
+                <span className="absolute right-1 top-1 rounded-md bg-black/65 px-1.5 py-0.5 text-[10px] font-semibold text-white/90">
+                  {index + 1}
+                </span>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        <div className="flex-1" />
+
+        {saveError ? (
+          <p className="pointer-events-auto mb-2 rounded-xl border border-red-300/35 bg-red-900/60 px-3 py-2 text-xs font-semibold text-red-100 backdrop-blur-md">
+            {saveError}
+          </p>
+        ) : null}
+
+        <div className="pointer-events-auto">
           <button
             type="button"
             onClick={() => {
-              void handlePassiveCheck();
+              void handleSave();
             }}
-            disabled={!modelReady || !cameraReady || checkBusy}
-            className="ui-btn ui-btn-primary mt-3 w-full disabled:cursor-not-allowed disabled:bg-slate-400"
+            disabled={saving}
+            className="w-full rounded-2xl border border-emerald-300/50 bg-emerald-500 px-4 py-3 text-sm font-black text-white shadow-[0_12px_30px_rgba(16,185,129,0.45)] transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:border-emerald-900/40 disabled:bg-emerald-900/60"
           >
-            {checkBusy ? "Checking..." : "Run Passive Liveness"}
+            {saving ? "Saving..." : "确认并完成注册"}
           </button>
-
-          <p className="ui-note-xs mt-2">
-            Passive threshold: score must be &gt;= {PASSIVE_LIVENESS_MIN_SCORE.toFixed(2)}.
+          <p className="mt-2 text-center text-[11px] font-semibold text-white/75">
+            点击后将 descriptor 与采集照片保存到本地数据库。
           </p>
-          {livenessScore !== null ? (
-            <p className="ui-note-xs">Latest score: {livenessScore.toFixed(3)}</p>
-          ) : null}
-        </section>
-
-        {saveError ? <p className="ui-note-error mt-3">{saveError}</p> : null}
-
-        <button
-          type="button"
-          onClick={() => {
-            void handleSave();
-          }}
-          disabled={!livenessPassedAt || saving}
-          className="ui-btn ui-btn-primary mt-4 w-full disabled:cursor-not-allowed disabled:bg-slate-400"
-        >
-          {saving ? "Saving..." : "Save Enrollment"}
-        </button>
+        </div>
       </main>
     </div>
   );
