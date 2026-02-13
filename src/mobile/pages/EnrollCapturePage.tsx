@@ -58,15 +58,22 @@ export default function EnrollCapturePage(props: EnrollCapturePageProps) {
 
   useEffect(() => {
     // Once target is reached, move to next step automatically.
-    if (!hasConsent || !canContinue || previewOpen) {
+    if (!hasConsent || previewOpen) {
+      return;
+    }
+    if (!canContinue) {
+      autoContinueCountRef.current = -1;
+      return;
+    }
+    if (flow.captureBusy) {
       return;
     }
     if (autoContinueCountRef.current === descriptorCount) {
       return;
     }
     autoContinueCountRef.current = descriptorCount;
-    handleContinue();
-  }, [canContinue, descriptorCount, handleContinue, hasConsent, previewOpen]);
+    void handleContinue();
+  }, [canContinue, descriptorCount, flow.captureBusy, handleContinue, hasConsent, previewOpen]);
 
   if (!hasConsent) {
     return <EnrollmentCaptureConsentNotice onBack={props.onBack} />;
@@ -174,7 +181,7 @@ export default function EnrollCapturePage(props: EnrollCapturePageProps) {
             ) : null}
             {canContinue ? (
               <p className="mt-1 text-[10px] font-semibold text-emerald-200">
-                Target reached. Moving to next step...
+                {flow.captureBusy ? "Target reached. Running quality recheck..." : "Target reached. Preparing next step..."}
               </p>
             ) : null}
           </div>

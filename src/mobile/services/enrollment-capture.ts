@@ -1,11 +1,11 @@
-export const ENROLL_CAPTURE_TARGET = 20;
+export const ENROLL_CAPTURE_TARGET = 10;
 export const ENROLL_AUTO_CAPTURE_INTERVAL_MS = 600;
 export const ENROLL_MIN_DETECTION_SCORE = 0.55;
 export const ENROLL_MIN_DESCRIPTOR_DIFF_PERCENT = 15;
 export const ENROLL_SAME_PERSON_MAX_DISTANCE = 0.58;
 export const ENROLL_SAME_PERSON_MAX_DISTANCE_PERCENT = ENROLL_SAME_PERSON_MAX_DISTANCE * 100;
-// Raw Laplacian variance threshold (non-normalized). Calibrated to reduce over-blocking.
-export const ENROLL_BLUR_THRESHOLD_BASE = 2200;
+// Raw Laplacian variance threshold (non-normalized). Tuned higher to reduce blurry-frame leak-through.
+export const ENROLL_BLUR_THRESHOLD_BASE = 7500;
 export const ENROLL_BLUR_STREAK_ALERT_COUNT = 3;
 export const ENROLL_CAPTURE_HINTS = [
   "Face Forward",

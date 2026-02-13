@@ -1,17 +1,37 @@
 import type { FaceBox } from "../../services/face";
 
+type FaceFrameSource = HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
+
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
 }
 
+function getSourceSize(source: FaceFrameSource): { width: number; height: number } {
+  if (source instanceof HTMLVideoElement) {
+    return {
+      width: source.videoWidth || source.clientWidth || 0,
+      height: source.videoHeight || source.clientHeight || 0,
+    };
+  }
+  if (source instanceof HTMLImageElement) {
+    return {
+      width: source.naturalWidth || source.width || 0,
+      height: source.naturalHeight || source.height || 0,
+    };
+  }
+  return {
+    width: source.width,
+    height: source.height,
+  };
+}
+
 function buildFaceCanvas(
-  videoElement: HTMLVideoElement,
+  source: FaceFrameSource,
   faceBox: FaceBox,
   paddingRatio = 0.14,
   maxEdge = 160
 ): HTMLCanvasElement | null {
-  const sourceWidth = videoElement.videoWidth;
-  const sourceHeight = videoElement.videoHeight;
+  const { width: sourceWidth, height: sourceHeight } = getSourceSize(source);
   if (!sourceWidth || !sourceHeight) {
     return null;
   }
@@ -39,7 +59,7 @@ function buildFaceCanvas(
 
   // Draw only face crop to minimize CPU usage.
   context.drawImage(
-    videoElement,
+    source,
     cropX,
     cropY,
     cropWidth,
@@ -72,16 +92,36 @@ export function calculateSharpness(canvas: HTMLCanvasElement): number {
     const blue = pixels[index + 2];
     gray[pixel] = 0.299 * red + 0.587 * green + 0.114 * blue;
   }
+  const smoothed = new Float32Array(gray.length);
+  // Light denoise pass (3x3 mean blur) to suppress ISO noise spikes from front cameras.
+  for (let y = 0; y < height; y += 1) {
+    const row = y * width;
+    for (let x = 0; x < width; x += 1) {
+      const centerIndex = row + x;
+      if (x === 0 || y === 0 || x === width - 1 || y === height - 1) {
+        smoothed[centerIndex] = gray[centerIndex];
+        continue;
+      }
+      let sumNeighbors = 0;
+      for (let offsetY = -1; offsetY <= 1; offsetY += 1) {
+        const sampleRow = (y + offsetY) * width;
+        for (let offsetX = -1; offsetX <= 1; offsetX += 1) {
+          sumNeighbors += gray[sampleRow + x + offsetX];
+        }
+      }
+      smoothed[centerIndex] = sumNeighbors / 9;
+    }
+  }
 
   let sum = 0;
   let sumSquares = 0;
   let samples = 0;
 
-  // Use central ROI to reduce background-edge noise that can falsely inflate sharpness.
-  const roiStartX = Math.max(1, Math.floor(width * 0.12));
-  const roiEndX = Math.min(width - 1, Math.ceil(width * 0.88));
-  const roiStartY = Math.max(1, Math.floor(height * 0.12));
-  const roiEndY = Math.min(height - 1, Math.ceil(height * 0.88));
+  // Use a tighter center ROI (55%) to avoid face-edge/background high-frequency contamination.
+  const roiStartX = Math.max(1, Math.floor(width * 0.225));
+  const roiEndX = Math.min(width - 1, Math.ceil(width * 0.775));
+  const roiStartY = Math.max(1, Math.floor(height * 0.225));
+  const roiEndY = Math.min(height - 1, Math.ceil(height * 0.775));
 
   // Laplacian kernel: neighbors - center*8, using variance as sharpness score.
   for (let y = roiStartY; y < roiEndY; y += 1) {
@@ -89,15 +129,15 @@ export function calculateSharpness(canvas: HTMLCanvasElement): number {
     for (let x = roiStartX; x < roiEndX; x += 1) {
       const centerIndex = row + x;
       const laplacian =
-        gray[centerIndex - width - 1] +
-        gray[centerIndex - width] +
-        gray[centerIndex - width + 1] +
-        gray[centerIndex - 1] -
-        8 * gray[centerIndex] +
-        gray[centerIndex + 1] +
-        gray[centerIndex + width - 1] +
-        gray[centerIndex + width] +
-        gray[centerIndex + width + 1];
+        smoothed[centerIndex - width - 1] +
+        smoothed[centerIndex - width] +
+        smoothed[centerIndex - width + 1] +
+        smoothed[centerIndex - 1] -
+        8 * smoothed[centerIndex] +
+        smoothed[centerIndex + 1] +
+        smoothed[centerIndex + width - 1] +
+        smoothed[centerIndex + width] +
+        smoothed[centerIndex + width + 1];
       sum += laplacian;
       sumSquares += laplacian * laplacian;
       samples += 1;
@@ -115,10 +155,10 @@ export function calculateSharpness(canvas: HTMLCanvasElement): number {
 }
 
 export function calculateFaceSharpness(
-  videoElement: HTMLVideoElement,
+  source: FaceFrameSource,
   faceBox: FaceBox
 ): number | null {
-  const faceCanvas = buildFaceCanvas(videoElement, faceBox);
+  const faceCanvas = buildFaceCanvas(source, faceBox);
   if (!faceCanvas) {
     return null;
   }

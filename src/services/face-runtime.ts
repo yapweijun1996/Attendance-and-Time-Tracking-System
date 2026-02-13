@@ -26,7 +26,7 @@ export interface FaceApiRuntime {
     scoreThreshold: number;
   }) => unknown;
   detectSingleFace: (
-    input: HTMLVideoElement | HTMLCanvasElement,
+    input: HTMLVideoElement | HTMLCanvasElement | HTMLImageElement,
     options: unknown
   ) => {
     withFaceLandmarks: () => {

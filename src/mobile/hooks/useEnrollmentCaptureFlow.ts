@@ -2,50 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { FaceBox, FacePoint } from "../../services/face";
 import { useAutoCaptureLoop } from "./useAutoCaptureLoop";
 import { useFaceModelBootstrap } from "./useFaceModelBootstrap";
+import type { UseEnrollmentCaptureFlowInput, UseEnrollmentCaptureFlowResult } from "./useEnrollmentCaptureFlow.types";
+import { useEnrollmentQualityContinue } from "./useEnrollmentQualityContinue";
 import { ENROLL_AUTO_CAPTURE_INTERVAL_MS, ENROLL_BLUR_STREAK_ALERT_COUNT, ENROLL_CAPTURE_TARGET, ENROLL_MIN_DETECTION_SCORE, ENROLL_MIN_DESCRIPTOR_DIFF_PERCENT, ENROLL_SAME_PERSON_MAX_DISTANCE, ENROLL_SAME_PERSON_MAX_DISTANCE_PERCENT, type CaptureDiagnostics, type CaptureFlowState, buildCaptureDiagnostics, captureEnrollmentPhoto, createDefaultCaptureDiagnostics, descriptorDifferencePercent, estimateFrameBrightness, euclideanDistance, resolveBlurThreshold } from "../services/enrollment-capture";
 import { readEnrollmentDraft, saveEnrollmentDraft } from "../services/enrollment-draft";
 import { calculateFaceSharpness } from "../utils/sharpness";
 import { evaluateFaceVisibility } from "../utils/face-visibility";
-interface UseEnrollmentCaptureFlowInput {
-  consentAcceptedAt: string | null;
-  initialDescriptors: number[][];
-  initialPhotos: string[];
-  onBack: () => void;
-  onReset: () => void;
-  onCompleted: (payload: { descriptors: number[][]; photos: string[] }) => void;
-}
-interface UseEnrollmentCaptureFlowResult {
-  hasConsent: boolean;
-  modelPercent: number;
-  modelReady: boolean;
-  modelLoading: boolean;
-  modelError: string | null;
-  cameraReady: boolean;
-  cameraError: string | null;
-  videoElement: HTMLVideoElement | null;
-  descriptors: number[][];
-  photos: string[];
-  captureBusy: boolean;
-  autoCaptureEnabled: boolean;
-  captureState: CaptureFlowState;
-  captureHint: string;
-  blurStatus: "NORMAL" | "BLURRY";
-  blurFrameStreak: number;
-  lastSharpnessScore: number | null;
-  lastMinDiffPercent: number | null;
-  diagnostics: CaptureDiagnostics;
-  faceGuideBox: FaceBox | null;
-  faceGuideLandmarks: FacePoint[];
-  capturePercent: number;
-  captureTarget: number;
-  minDescriptorDiffPercent: number;
-  autoCaptureIntervalMs: number;
-  handleCameraReady: (video: HTMLVideoElement) => void;
-  handleCameraError: (error: Error) => void;
-  handleToggleAutoCapture: () => void;
-  handleReset: () => void;
-  handleContinue: () => void;
-}
 export function useEnrollmentCaptureFlow({
   consentAcceptedAt,
   initialDescriptors,
@@ -79,6 +41,8 @@ export function useEnrollmentCaptureFlow({
   const [faceGuideLandmarks, setFaceGuideLandmarks] = useState<FacePoint[]>([]);
   const lastBlurVibrationAtRef = useRef(0);
   const sharpnessWindowRef = useRef<number[]>([]);
+  const sharpnessPeakRef = useRef(0);
+  const sharpnessHistoryRef = useRef<number[]>([]);
   const persistDraft = useCallback(
     (nextDescriptors: number[][], nextPhotos: string[]) => {
       if (!effectiveConsentAcceptedAt) {
@@ -139,22 +103,50 @@ export function useEnrollmentCaptureFlow({
       if (sharpnessScore !== null) {
         const window = [...sharpnessWindowRef.current, sharpnessScore];
         sharpnessWindowRef.current = window.slice(-3);
+        const history = [...sharpnessHistoryRef.current, sharpnessScore];
+        sharpnessHistoryRef.current = history.slice(-48);
+        // Device-adaptive baseline: keep peak with mild decay to avoid permanent stale ceiling.
+        sharpnessPeakRef.current = Math.max(sharpnessPeakRef.current * 0.995, sharpnessScore);
       }
       const scoreWindow = sharpnessWindowRef.current;
       const averageSharpness =
         scoreWindow.length > 0
           ? scoreWindow.reduce((sum, value) => sum + value, 0) / scoreWindow.length
           : sharpnessScore;
+      const peakSharpness = sharpnessPeakRef.current;
+      const sortedHistory = [...sharpnessHistoryRef.current].sort((left, right) => left - right);
+      const p30 = sortedHistory.length
+        ? sortedHistory[Math.floor((sortedHistory.length - 1) * 0.3)]
+        : 0;
+      const p75 = sortedHistory.length
+        ? sortedHistory[Math.floor((sortedHistory.length - 1) * 0.75)]
+        : 0;
+      const dynamicBase = Math.max(peakSharpness * 0.72, p75 * 0.64);
+      const adaptiveFloor = Math.max(220, p30 * 0.55);
+      const adaptiveThreshold =
+        peakSharpness > 0
+          ? Math.min(blurThreshold, Math.max(adaptiveFloor, dynamicBase))
+          : Math.min(blurThreshold, 1200);
+      const warmupBypass =
+        descriptors.length === 0 &&
+        sharpnessHistoryRef.current.length < 8 &&
+        averageSharpness !== null &&
+        averageSharpness >= 180;
       setLastSharpnessScore(averageSharpness);
       if (import.meta.env.DEV) {
         console.debug("[Enroll][Blur]", {
           sharpnessScore,
           averageSharpness,
           blurThreshold,
+          adaptiveThreshold,
+          peakSharpness,
+          p30,
+          p75,
+          warmupBypass,
           lightLevel: frameDiagnostics.lightLevel,
         });
       }
-      if (averageSharpness !== null && averageSharpness < blurThreshold) {
+      if (!warmupBypass && averageSharpness !== null && averageSharpness < adaptiveThreshold) {
         setBlurStatus("BLURRY");
         setBlurFrameStreak((previous) => {
           const next = previous + 1;
@@ -252,16 +244,26 @@ export function useEnrollmentCaptureFlow({
     setBlurFrameStreak(0);
     setLastSharpnessScore(null);
     sharpnessWindowRef.current = [];
+    sharpnessPeakRef.current = 0;
+    sharpnessHistoryRef.current = [];
     lastBlurVibrationAtRef.current = 0;
     setLastMinDiffPercent(null);
     setDiagnostics(createDefaultCaptureDiagnostics());
     setFaceGuideBox(null);
     setFaceGuideLandmarks([]);
   }, [onReset, persistDraft]);
-  const handleContinue = useCallback(() => {
-    persistDraft(descriptors, photos);
-    onCompleted({ descriptors, photos });
-  }, [descriptors, onCompleted, persistDraft, photos]);
+  const handleContinue = useEnrollmentQualityContinue({
+    captureBusy,
+    descriptors,
+    photos,
+    persistDraft,
+    onCompleted,
+    setCaptureBusy,
+    setCaptureState,
+    setCaptureHint,
+    setDescriptors,
+    setPhotos,
+  });
   const capturePercent = Math.round((descriptors.length / ENROLL_CAPTURE_TARGET) * 100);
   return {
     hasConsent: Boolean(effectiveConsentAcceptedAt),

@@ -1,10 +1,14 @@
 import type { FaceBox, FacePoint } from "../../services/face";
 
+type FaceImageSource = HTMLVideoElement | HTMLImageElement | HTMLCanvasElement;
+
 const MIN_REFERENCE_SKIN_RATIO = 0.12;
 const MAX_LOWER_FACE_SKIN_RATIO = 0.07;
 const MAX_LOWER_TO_UPPER_SKIN_RATIO = 0.5;
-const MIN_EYE_LUMA_STDDEV = 12;
-const MIN_EYE_STDDEV_SYMMETRY = 0.58;
+const MIN_EYE_LUMA_STDDEV = 16;
+const MIN_EYE_STDDEV_SYMMETRY = 0.72;
+const MAX_SINGLE_EYE_SKIN_RATIO = 0.58;
+const MIN_EYE_SKIN_RATIO_DELTA = 0.18;
 
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value));
@@ -96,9 +100,27 @@ function makeExpandedRegion(
   };
 }
 
-export function evaluateLowerFaceOcclusion(videoElement: HTMLVideoElement, box: FaceBox): string | null {
-  const sourceWidth = videoElement.videoWidth;
-  const sourceHeight = videoElement.videoHeight;
+function getSourceSize(source: FaceImageSource): { width: number; height: number } {
+  if (source instanceof HTMLVideoElement) {
+    return {
+      width: source.videoWidth || source.clientWidth || 0,
+      height: source.videoHeight || source.clientHeight || 0,
+    };
+  }
+  if (source instanceof HTMLImageElement) {
+    return {
+      width: source.naturalWidth || source.width || 0,
+      height: source.naturalHeight || source.height || 0,
+    };
+  }
+  return {
+    width: source.width,
+    height: source.height,
+  };
+}
+
+export function evaluateLowerFaceOcclusion(source: FaceImageSource, box: FaceBox): string | null {
+  const { width: sourceWidth, height: sourceHeight } = getSourceSize(source);
   if (!sourceWidth || !sourceHeight) {
     return null;
   }
@@ -116,7 +138,7 @@ export function evaluateLowerFaceOcclusion(videoElement: HTMLVideoElement, box: 
   if (!context) {
     return null;
   }
-  context.drawImage(videoElement, 0, 0, sourceWidth, sourceHeight);
+  context.drawImage(source, 0, 0, sourceWidth, sourceHeight);
   const sampleX = faceX + Math.round(faceWidth * 0.2);
   const sampleWidth = Math.max(8, Math.round(faceWidth * 0.6));
   const upperRegion = {
@@ -149,11 +171,10 @@ export function evaluateLowerFaceOcclusion(videoElement: HTMLVideoElement, box: 
 }
 
 export function evaluateEyeOcclusion(
-  videoElement: HTMLVideoElement,
+  source: FaceImageSource,
   landmarks: FacePoint[]
 ): { blocked: boolean; reason: string | null } {
-  const sourceWidth = videoElement.videoWidth;
-  const sourceHeight = videoElement.videoHeight;
+  const { width: sourceWidth, height: sourceHeight } = getSourceSize(source);
   if (!sourceWidth || !sourceHeight) {
     return { blocked: false, reason: null };
   }
@@ -164,25 +185,32 @@ export function evaluateEyeOcclusion(
   if (!context) {
     return { blocked: false, reason: null };
   }
-  context.drawImage(videoElement, 0, 0, sourceWidth, sourceHeight);
+  context.drawImage(source, 0, 0, sourceWidth, sourceHeight);
   const leftEyeBounds = boundsFromPoints(landmarks.slice(36, 42));
   const rightEyeBounds = boundsFromPoints(landmarks.slice(42, 48));
   const leftRegion = makeExpandedRegion(leftEyeBounds, 0.45, 0.7, sourceWidth, sourceHeight);
   const rightRegion = makeExpandedRegion(rightEyeBounds, 0.45, 0.7, sourceWidth, sourceHeight);
   const leftStd = getLuminanceStdDev(context, leftRegion);
   const rightStd = getLuminanceStdDev(context, rightRegion);
-  if (leftStd === null || rightStd === null) {
+  const leftSkinRatio = getSkinRatio(context, leftRegion);
+  const rightSkinRatio = getSkinRatio(context, rightRegion);
+  if (leftStd === null || rightStd === null || leftSkinRatio === null || rightSkinRatio === null) {
     return { blocked: false, reason: null };
   }
   const minStd = Math.min(leftStd, rightStd);
   const maxStd = Math.max(leftStd, rightStd);
   const symmetry = minStd / Math.max(0.001, maxStd);
-  const blocked = minStd < MIN_EYE_LUMA_STDDEV && symmetry < MIN_EYE_STDDEV_SYMMETRY;
+  const maxSkinRatio = Math.max(leftSkinRatio, rightSkinRatio);
+  const skinDelta = Math.abs(leftSkinRatio - rightSkinRatio);
+  const blockedByTexture = minStd < MIN_EYE_LUMA_STDDEV && symmetry < MIN_EYE_STDDEV_SYMMETRY;
+  const blockedBySkin =
+    maxSkinRatio > MAX_SINGLE_EYE_SKIN_RATIO && skinDelta > MIN_EYE_SKIN_RATIO_DELTA;
+  const blocked = blockedByTexture || blockedBySkin;
   if (!blocked) {
     return { blocked: false, reason: null };
   }
   return {
     blocked: true,
-    reason: `eye_occlusion(std:${minStd.toFixed(1)},sym:${symmetry.toFixed(2)})`,
+    reason: `eye_occlusion(std:${minStd.toFixed(1)},sym:${symmetry.toFixed(2)},skin:${maxSkinRatio.toFixed(2)},delta:${skinDelta.toFixed(2)})`,
   };
 }

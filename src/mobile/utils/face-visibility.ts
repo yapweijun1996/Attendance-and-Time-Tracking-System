@@ -9,8 +9,8 @@ interface FaceVisibilityCheck {
 const MIN_EYE_AREA_RATIO = 0.001;
 const MIN_NOSE_HEIGHT_RATIO = 0.1;
 const MIN_INTER_EYE_RATIO = 0.22;
-const MIN_EYE_AREA_SYMMETRY_RATIO = 0.55;
-const MIN_EYE_WIDTH_SYMMETRY_RATIO = 0.62;
+const MIN_EYE_AREA_SYMMETRY_RATIO = 0.68;
+const MIN_EYE_WIDTH_SYMMETRY_RATIO = 0.72;
 const MIN_MOUTH_AREA_RATIO = 0.007;
 const MIN_MOUTH_WIDTH_RATIO = 0.24;
 const MIN_MOUTH_HEIGHT_RATIO = 0.02;
@@ -59,7 +59,7 @@ function distance(left: FacePoint, right: FacePoint): number {
 export function evaluateFaceVisibility(
   box: FaceBox,
   landmarks: FacePoint[],
-  videoElement?: HTMLVideoElement,
+  sourceElement?: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement,
   landmarkConfidence = 1
 ): FaceVisibilityCheck {
   if (landmarks.length < 68) {
@@ -112,14 +112,14 @@ export function evaluateFaceVisibility(
   ) {
     failedChecks.push("eyes");
   }
-  const eyeOcclusionResult = videoElement ? evaluateEyeOcclusion(videoElement, landmarks) : null;
+  const eyeOcclusionResult = sourceElement ? evaluateEyeOcclusion(sourceElement, landmarks) : null;
   if (eyeOcclusionResult?.blocked && eyeOcclusionResult.reason) {
     failedChecks.push(eyeOcclusionResult.reason);
   }
   if (mouthLikelyBlocked) {
     failedChecks.push("mouth");
   }
-  const lowerFaceOcclusionReason = videoElement ? evaluateLowerFaceOcclusion(videoElement, box) : null;
+  const lowerFaceOcclusionReason = sourceElement ? evaluateLowerFaceOcclusion(sourceElement, box) : null;
   if (lowerFaceOcclusionReason) {
     failedChecks.push(lowerFaceOcclusionReason);
   }

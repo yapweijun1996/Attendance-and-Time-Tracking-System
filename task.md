@@ -220,7 +220,7 @@
 - Mobile routes render correctly and can navigate between Home/Verify/Result/History/Profile.
 - Home action buttons navigate with action query parameter.
 - Verify flow can run 1:1 match against enrolled descriptors using `POLICY_CONFIG.verification.threshold`, and only write local event when matched.
-- Register flow can complete consent, collect 20 descriptors + photos (each new descriptor MUST differ by >=15%), pass passive liveness (no action detection), and write profile data to PouchDB.
+- Register flow can complete consent, collect 10 descriptors + photos (each new descriptor MUST differ by >=15%), pass passive liveness (no action detection), and write profile data to PouchDB.
 - Lint/build both pass.
 
 ### Security & Constraints
@@ -290,11 +290,11 @@
 - Completed:
   - Enforced serial startup: model must be ready before camera mount; added waiting loader and 15s slow-network hint.
   - Upgraded captured-photo preview to fullscreen modal and wired auto pause/resume for auto-capture during preview.
-  - Added anti-blur gate (`src/mobile/utils/sharpness.ts`, Laplacian variance): dynamic threshold by light level, `BLURRY` state, blur-score debug output in dev, vibration on 3+ consecutive blurry frames, plus anchor same-person distance guard.
-  - Added stricter occlusion gate (`src/mobile/utils/face-visibility.ts`, `src/mobile/utils/visibility-image-checks.ts`): tighter mouth/eye geometry checks with lower-face and eye-region pixel checks to block hand-over-face/mask frames before descriptor/photo write.
+  - Added anti-blur gate (`src/mobile/utils/sharpness.ts`, Laplacian variance): dynamic threshold by light level with base blur threshold `7500`, 3x3 pre-smoothing + center 55% ROI, and camera-adaptive gating via session history percentiles + peak + warmup bypass (applied in both capture and quality-recheck) to avoid first-frame lock and recheck loops on low-quality cameras, `BLURRY` state, blur-score debug output in dev, vibration on 3+ consecutive blurry frames, plus anchor same-person distance guard.
+  - Added stricter occlusion gate + pre-submit quality recheck (`src/mobile/utils/face-visibility.ts`, `src/mobile/utils/visibility-image-checks.ts`, `src/mobile/services/enrollment-quality-review.ts`): tightened `MIN_MOUTH_AREA_RATIO`/`MIN_NOSE_TO_MOUTH_RATIO`, used detection score as landmark-confidence proxy, combined mouth/eye geometry with lower-face + eye-region pixel/skin-asymmetry checks, and before moving to liveness revalidated all photos to drop abnormal frames; if kept frames < 10, flow returns to capture with reason hint.
   - Simplified capture HUD and controls: split `[status][progress]` pills, removed low-value prompt text, dropped manual Continue button, and auto-advance to next step at target count.
 - Verification:
   - `npm run lint` passed.
   - `npm run build` passed.
 - Expected Outcome:
-  - Blurry/occluded/mixed-identity frames are blocked from enrollment, capture flow is less error-prone under weak network/motion, and operator feedback is immediate.
+  - Blurry/occluded/mixed-identity frames are blocked from enrollment, final batch quality is revalidated before submit, and operator feedback is immediate.

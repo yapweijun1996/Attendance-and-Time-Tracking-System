@@ -101,7 +101,9 @@ class FaceAPIService {
     this.matchThreshold = threshold;
   }
 
-  async detectFace(videoElement: HTMLVideoElement): Promise<DetectFaceResult | null> {
+  async detectFace(
+    inputElement: HTMLVideoElement | HTMLImageElement | HTMLCanvasElement
+  ): Promise<DetectFaceResult | null> {
     if (!this.modelsLoaded) {
       throw new Error("Face models are not loaded. Call loadModels() first.");
     }
@@ -109,7 +111,7 @@ class FaceAPIService {
     const faceApi = await faceRuntimeLoader.getFaceApi();
     const detection = await faceApi
       .detectSingleFace(
-        videoElement,
+        inputElement,
         new faceApi.TinyFaceDetectorOptions({
           inputSize: this.detectorInputSize,
           scoreThreshold: this.detectorScoreThreshold,
