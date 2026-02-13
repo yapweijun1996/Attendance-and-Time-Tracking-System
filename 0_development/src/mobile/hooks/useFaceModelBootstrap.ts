@@ -23,7 +23,7 @@ export function useFaceModelBootstrap(): FaceModelBootstrapState {
       setModelError(null);
       try {
         const { faceAPIService } = await import("../../services/face");
-        await faceAPIService.loadModels("/models", (progress: FaceModelLoadProgress) => {
+        await faceAPIService.loadModels(undefined, (progress: FaceModelLoadProgress) => {
           if (!cancelled) {
             setModelPercent(progress.percent);
           }

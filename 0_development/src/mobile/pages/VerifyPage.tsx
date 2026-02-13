@@ -67,7 +67,7 @@ export default function VerifyPage({ action, onBack, onCompleted }: VerifyPagePr
       setModelError(null);
       try {
         const { faceAPIService } = await import("../../services/face");
-        await faceAPIService.loadModels("/models", (progress: FaceModelLoadProgress) => {
+        await faceAPIService.loadModels(undefined, (progress: FaceModelLoadProgress) => {
           if (cancelled) {
             return;
           }

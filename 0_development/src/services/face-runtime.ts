@@ -1,3 +1,5 @@
+import { resolveBasePath } from "../utils/base-path";
+
 export interface FaceApiDetection {
   descriptor: Float32Array;
   detection: {
@@ -57,8 +59,8 @@ export interface FaceRuntimeState {
 class FaceRuntimeLoader {
   private faceApi: FaceApiRuntime | null = null;
   private runtimeReady: Promise<void> | null = null;
-  private readonly faceApiScriptPath = "/vendor/face-api.js";
-  private readonly tfWasmAssetPath = "/vendor/";
+  private readonly faceApiScriptPath = resolveBasePath("vendor/face-api.js");
+  private readonly tfWasmAssetPath = resolveBasePath("vendor/");
 
   private getRuntimeWindow(): FaceRuntimeWindow {
     return window as FaceRuntimeWindow;

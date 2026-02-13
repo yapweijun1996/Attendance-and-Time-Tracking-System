@@ -1,6 +1,7 @@
 import { faceRuntimeLoader, type FaceRuntimeState } from "./face-runtime";
 import { matchFaceDescriptor, normalizeProfiles } from "./face-core/matcher";
 import { createLoadedProgress, loadFaceModels } from "./face-core/models";
+import { resolveBasePath } from "../utils/base-path";
 import type {
   DetectFaceResult,
   FaceModelLoadProgress,
@@ -21,7 +22,7 @@ export type {
 
 class FaceAPIService {
   private static instance: FaceAPIService;
-  private modelPath = "/models";
+  private modelPath = resolveBasePath("models");
   private modelsLoaded = false;
   private modelLoadPromise: Promise<void> | null = null;
   private matchThreshold = 0.6;
@@ -39,7 +40,7 @@ class FaceAPIService {
   }
 
   async loadModels(
-    modelPath = "/models",
+    modelPath = resolveBasePath("models"),
     onProgress?: (progress: FaceModelLoadProgress) => void
   ): Promise<void> {
     if (this.modelsLoaded) {

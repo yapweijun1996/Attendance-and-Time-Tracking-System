@@ -5,7 +5,11 @@ import { VitePWA } from 'vite-plugin-pwa'
 import { fileURLToPath, URL } from 'node:url'
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ command }) => {
+  const appBase = command === "build" ? "./" : "/";
+
+  return {
+  base: appBase,
   resolve: {
     alias: {
       events: fileURLToPath(new URL('./node_modules/events/events.js', import.meta.url)),
@@ -15,12 +19,16 @@ export default defineConfig({
     react(),
     tailwindcss(),
     VitePWA({
+      base: appBase,
+      buildBase: appBase,
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
       manifest: {
         name: 'Attendance & Time Tracking System',
         short_name: 'Attendance',
         description: 'Advanced Attendance and Time Tracking System',
+        start_url: './',
+        scope: './',
         theme_color: '#ffffff',
         icons: [
           {
@@ -78,4 +86,5 @@ export default defineConfig({
       },
     },
   },
+}
 })
