@@ -1,8 +1,16 @@
 function normalizeBaseUrl(baseUrl: string): string {
-  if (!baseUrl || baseUrl === "/") {
-    return "./";
+  const trimmed = baseUrl.trim();
+  if (!trimmed || trimmed === "/" || trimmed === "./") {
+    return "/";
   }
-  return baseUrl.endsWith("/") ? baseUrl : `${baseUrl}/`;
+
+  const withoutDotPrefix = trimmed.replace(/^\.\//, "");
+  const withLeadingSlash = withoutDotPrefix.startsWith("/")
+    ? withoutDotPrefix
+    : `/${withoutDotPrefix}`;
+  return withLeadingSlash.endsWith("/")
+    ? withLeadingSlash
+    : `${withLeadingSlash}/`;
 }
 
 export function resolveBasePath(relativePath: string): string {
@@ -11,4 +19,3 @@ export function resolveBasePath(relativePath: string): string {
   const normalizedPath = relativePath.replace(/^\/+/, "");
   return `${normalizedBase}${normalizedPath}`;
 }
-
