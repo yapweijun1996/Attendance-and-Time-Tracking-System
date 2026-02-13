@@ -292,7 +292,7 @@
   - Added anti-blur gate (`src/mobile/utils/sharpness.ts`, Laplacian variance): dynamic threshold by light level with base blur threshold `7500`, 3x3 pre-smoothing + center 55% ROI, and camera-adaptive gating via session history percentiles + peak + warmup bypass (applied in both capture and quality-recheck) to avoid first-frame lock and recheck loops on low-quality cameras, `BLURRY` state, blur-score debug output in dev, vibration on 3+ consecutive blurry frames, plus anchor same-person distance guard.
   - Added stricter occlusion gate + pre-submit quality recheck (`src/mobile/utils/face-visibility.ts`, `src/mobile/utils/visibility-image-checks.ts`, `src/mobile/services/enrollment-quality-review.ts`): tightened `MIN_MOUTH_AREA_RATIO`/`MIN_NOSE_TO_MOUTH_RATIO`, used detection score as landmark-confidence proxy, combined mouth/eye geometry with lower-face + eye-region pixel/skin-asymmetry checks, and before moving to liveness revalidated all photos to drop abnormal frames; if kept frames < 10, flow returns to capture with reason hint.
   - Simplified liveness stage to Review & Confirm (`src/mobile/pages/EnrollLivenessPage.tsx`): removed live camera and passive-scan loop, switched to captured-photo grid preview (4/5 cols), and keep save CTA always enabled for one-step completion.
-  - Simplified capture HUD and controls: split `[status][progress]` pills, removed low-value prompt text, dropped manual Continue button, and auto-advance to next step at target count.
+  - Fixed GitHub Pages sub-path 404: switched build/public/runtime assets to relative path strategy (`vite base=./`, PWA `start_url/scope=./`, runtime `models/vendor` resolved from `import.meta.env.BASE_URL`).
 - Verification:
   - `npm run lint` passed.
   - `npm run build` passed.

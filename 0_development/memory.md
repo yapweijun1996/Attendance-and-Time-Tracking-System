@@ -295,6 +295,6 @@
 ## Implementation Update (2026-02-12, Round C37)
 - 目标：把 `/m/enroll/capture` 提升为更稳健的生产化采集流程（串行加载 + 全屏预览控制 + Anti-Blur + 遮挡拦截）。
 - 实施：相机改为模型 ready 后才启动并显示 loader/15 秒慢网提示；照片预览改全屏 modal，预览开启自动暂停采集、关闭后自动恢复；新增 `src/mobile/utils/sharpness.ts`（Laplacian Variance）做模糊拦截，并在 `src/mobile/utils/face-visibility.ts` + `src/mobile/utils/visibility-image-checks.ts` 收紧 mouth/eye 几何阈值、上调 `MIN_MOUTH_AREA_RATIO`/`MIN_NOSE_TO_MOUTH_RATIO`、用 `detection.score` 作为 landmark 置信代理并增加下半脸（口罩）与眼区像素/肤色不对称拦截；新增 `src/mobile/services/enrollment-quality-review.ts` 在进入下一步前对 10 张重检并剔除遮挡/模糊/混人异常帧，不足 10 张强制回到补拍，同时将模糊阈值提到 7500 并在 sharpness 计算中加入 3x3 平滑与中心 55% ROI，采集/复检统一使用历史分位数 + 峰值 + warmup 放行做设备自适应阈值避免低质相机卡死与反复重检；`EnrollLivenessPage` 已改为 Review & Confirm 预览确认流：移除实时活体扫描，展示采集网格并直接保存。
-- UI：顶部状态胶囊分离（`[status][progress]`），移除冗余提示块；底部显示“环境：正常/模糊 + sharpness score”，并在连续模糊时给出中心黄色提示。
+- UI/Deploy：顶部状态胶囊分离（`[status][progress]`），移除冗余提示块；底部显示“环境：正常/模糊 + sharpness score”并在连续模糊时给出中心黄色提示；构建改为相对路径基线（`base=./` + runtime asset path follow `BASE_URL`）避免 GitHub Pages 404。
 - 验证：`npm run lint` Passed；`npm run build` Passed。
 - 决策影响：在弱网/抖动/遮挡场景下，采集质量更可控，10 张入库样本稳定性提升且用户反馈更明确。
