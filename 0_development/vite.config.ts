@@ -16,8 +16,8 @@ function normalizeBase(base: string): string {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  // Default to root-host deployment. Override with VITE_APP_BASE when needed.
-  const appBase = normalizeBase(env.VITE_APP_BASE || "/");
+  // Default to root-host deployment. Override with VITE_APP_BASE via env file or shell env.
+  const appBase = normalizeBase(process.env.VITE_APP_BASE || env.VITE_APP_BASE || "/");
 
   return {
     base: appBase,
@@ -98,4 +98,3 @@ export default defineConfig(({ mode }) => {
     },
   };
 });
-
