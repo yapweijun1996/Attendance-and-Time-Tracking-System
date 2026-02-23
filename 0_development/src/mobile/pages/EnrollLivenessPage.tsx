@@ -1,9 +1,16 @@
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 
 import { saveEnrollmentProfile } from "../services/enrollment";
 import { clearEnrollmentDraft, readEnrollmentDraft } from "../services/enrollment-draft";
 
 const DEFAULT_LIVENESS_CONFIDENCE = 1;
+
+function toDataUrl(photo: string): string {
+  if (photo.startsWith("data:")) {
+    return photo;
+  }
+  return `data:image/jpeg;base64,${photo}`;
+}
 
 interface EnrollLivenessPageProps {
   consentAcceptedAt: string | null;
@@ -26,6 +33,7 @@ export default function EnrollLivenessPage({
   const effectiveConsentAcceptedAt = consentAcceptedAt ?? bootDraft.consentAcceptedAt;
   const effectiveDescriptors = descriptors.length > 0 ? descriptors : bootDraft.descriptors;
   const effectivePhotos = photos.length > 0 ? photos : bootDraft.photos;
+  const previewPhotos = useMemo(() => effectivePhotos.map((photo) => toDataUrl(photo)), [effectivePhotos]);
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -102,7 +110,7 @@ export default function EnrollLivenessPage({
     );
   }
 
-  const backgroundPhoto = effectivePhotos[0];
+  const backgroundPhoto = previewPhotos[0];
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950">
@@ -142,7 +150,7 @@ export default function EnrollLivenessPage({
 
           {/* Keep dense preview grid so user can verify capture quality within one glance. */}
           <div className="mt-3 grid max-h-[55vh] grid-cols-4 gap-2 overflow-y-auto pr-1 sm:grid-cols-5">
-            {effectivePhotos.map((photo, index) => (
+            {previewPhotos.map((photo, index) => (
               <div
                 key={`${index}-${photo.slice(0, 24)}`}
                 className="relative overflow-hidden rounded-xl border border-white/20 bg-slate-900"
