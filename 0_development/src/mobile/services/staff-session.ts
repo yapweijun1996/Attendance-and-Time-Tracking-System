@@ -2,7 +2,7 @@ import type { StaffProfile } from "../../types/domain";
 import { loadStaffProfile } from "../../services/staff-master";
 
 const STAFF_SESSION_STORAGE_KEY = "satts.mobile.staff.session";
-const DEFAULT_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+const DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 
 export interface StaffSession {
   staffId: string;
@@ -89,10 +89,32 @@ export function readStaffSession(): StaffSession | null {
     return null;
   }
   const session = parseSession(raw);
-  if (!session || isExpired(session.expiresAt)) {
+  if (!session) {
     window.localStorage.removeItem(STAFF_SESSION_STORAGE_KEY);
     return null;
   }
+  if (isExpired(session.expiresAt)) {
+    // Keep refresh experience stable: renew expired session on next read.
+    const renewed = buildSession(
+      { staffId: session.staffId, name: session.name },
+      session.mustChangePassword,
+      DEFAULT_SESSION_TTL_MS
+    );
+    writeSession(renewed);
+    return renewed;
+  }
+
+  const remainingMs = Date.parse(session.expiresAt) - Date.now();
+  if (remainingMs < DEFAULT_SESSION_TTL_MS / 2) {
+    const renewed = buildSession(
+      { staffId: session.staffId, name: session.name },
+      session.mustChangePassword,
+      DEFAULT_SESSION_TTL_MS
+    );
+    writeSession(renewed);
+    return renewed;
+  }
+
   return session;
 }
 

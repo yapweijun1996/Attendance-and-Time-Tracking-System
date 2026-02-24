@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { loadRecentEvents } from "../mobile/services/attendance-log";
 import type { RecentEvent } from "../mobile/types";
+import { readLocationState } from "../shared/navigation";
 import AdminSidebar from "./components/AdminSidebar";
 import AdminTopNav from "./components/AdminTopNav";
 import DashboardPage from "./pages/DashboardPage";
@@ -54,7 +55,7 @@ export default function AdminApp({ onLogout }: AdminAppProps) {
   }, []);
 
   useEffect(() => {
-    if (window.location.pathname !== routeState.route) {
+    if (readLocationState().pathname !== routeState.route) {
       navigateTo(routeState.route, true);
     }
   }, [routeState.route]);

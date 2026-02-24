@@ -10,6 +10,7 @@ export type EnrollStatus = DomainEnrollStatus;
 
 export interface RecentEvent {
   id: string;
+  staffId: string;
   action: AttendanceAction;
   clientTs: string;
   geoStatus: GeoStatus;

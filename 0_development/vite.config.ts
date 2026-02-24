@@ -9,6 +9,9 @@ function normalizeBase(base: string): string {
   if (!trimmed || trimmed === "/") {
     return "/";
   }
+  if (trimmed === "./") {
+    return "./";
+  }
   const withLeadingSlash = trimmed.startsWith("/") ? trimmed : `/${trimmed}`;
   return withLeadingSlash.endsWith("/") ? withLeadingSlash : `${withLeadingSlash}/`;
 }
@@ -16,8 +19,8 @@ function normalizeBase(base: string): string {
 // https://vite.dev/config/
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), "");
-  // Default to root-host deployment. Override with VITE_APP_BASE via env file or shell env.
-  const appBase = normalizeBase(process.env.VITE_APP_BASE || env.VITE_APP_BASE || "/");
+  // Default to current-directory relative base. Override with VITE_APP_BASE via env file or shell env.
+  const appBase = normalizeBase(process.env.VITE_APP_BASE || env.VITE_APP_BASE || "./");
 
   return {
     base: appBase,
@@ -30,16 +33,18 @@ export default defineConfig(({ mode }) => {
       react(),
       tailwindcss(),
       VitePWA({
-        base: appBase,
-        buildBase: appBase,
+        // Keep app asset base relative ("./"), but pin SW/manifest URLs at host root
+        // to avoid deep-route resolution issues such as /m/manifest.webmanifest.
+        base: "/",
+        buildBase: "/",
         registerType: "autoUpdate",
         includeAssets: ["favicon.ico", "apple-touch-icon.png", "mask-icon.svg"],
         manifest: {
           name: "Attendance & Time Tracking System",
           short_name: "Attendance",
           description: "Advanced Attendance and Time Tracking System",
-          start_url: appBase,
-          scope: appBase,
+          start_url: "/",
+          scope: "/",
           theme_color: "#ffffff",
           icons: [
             {

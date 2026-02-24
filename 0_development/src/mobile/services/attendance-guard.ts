@@ -16,20 +16,22 @@ function toTimestamp(value: string): number {
 
 function findLatestActionEvent(
   action: AttendanceAction,
+  staffId: string | null,
   events: RecentEvent[]
 ): RecentEvent | null {
   const candidates = events
-    .filter((event) => event.action === action)
+    .filter((event) => event.action === action && (staffId ? event.staffId === staffId : true))
     .sort((left, right) => toTimestamp(right.clientTs) - toTimestamp(left.clientTs));
   return candidates.length > 0 ? candidates[0] : null;
 }
 
 export async function checkActionCooldown(
   action: AttendanceAction,
-  cooldownSec = DEFAULT_COOLDOWN_SEC
+  cooldownSec = DEFAULT_COOLDOWN_SEC,
+  staffId: string | null = null
 ): Promise<CooldownCheckResult> {
   const events = await loadRecentEvents(50);
-  const latest = findLatestActionEvent(action, events);
+  const latest = findLatestActionEvent(action, staffId, events);
   if (!latest) {
     return {
       allowed: true,

@@ -7,6 +7,7 @@ import { DEFAULT_MOBILE_ROUTE, navigateTo, readMobileRoute, type MobileRoute, ty
 import { loadRecentEvents } from "./services/attendance-log";
 import { clearEnrollmentDraft } from "./services/enrollment-draft";
 import { loadEnrollmentSummary } from "./services/enrollment";
+import { readLocationState } from "../shared/navigation";
 import type { AttendanceAction, EnrollStatus, RecentEvent, SyncState, VerificationResult } from "./types";
 
 function parseVerifyAction(search: string): AttendanceAction {
@@ -84,7 +85,7 @@ export default function MobileApp() {
   }, []);
 
   useEffect(() => {
-    if (window.location.pathname !== routeState.route) {
+    if (readLocationState().pathname !== routeState.route) {
       navigateTo(routeState.route, true);
     }
   }, [routeState.route]);
@@ -232,7 +233,7 @@ export default function MobileApp() {
   );
 
   const currentRoute = routeState.route ?? DEFAULT_MOBILE_ROUTE;
-  const sidebarBannerOffset = ["/m/home", "/m/history", "/m/profile", "/m/enroll/consent", "/m/enroll/capture", "/m/enroll/liveness"].includes(currentRoute);
+  const sidebarBannerOffset = ["/m/home", "/m/history", "/m/profile", "/m/verify", "/m/enroll/consent", "/m/enroll/capture", "/m/enroll/liveness"].includes(currentRoute);
   const bannerMessage = appError ?? appNotice;
   const banner = bannerMessage ? (
     <div className={sidebarBannerOffset ? "px-4 pt-4 sm:px-8 lg:pr-8 lg:pl-72" : "px-4 pt-4 sm:px-8"}>

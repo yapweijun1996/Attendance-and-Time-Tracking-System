@@ -135,7 +135,17 @@ export default function MobileMainRoutes({
   }
   if (currentRoute === "/m/verify") {
     return (
-      <VerifyPage action={verifyAction} onBack={() => onNavigate("/m/home")} onCompleted={onVerifyCompleted} />
+      <VerifyPage
+        currentRoute={currentRoute}
+        action={verifyAction}
+        staffName={staffName}
+        dbReady={dbReady}
+        online={online}
+        latestSyncState={latestSyncState}
+        onBack={() => onNavigate("/m/home")}
+        onNavigate={onNavigate}
+        onCompleted={onVerifyCompleted}
+      />
     );
   }
   if (currentRoute === "/m/result") {

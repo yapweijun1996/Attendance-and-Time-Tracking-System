@@ -1,7 +1,7 @@
 import type { SystemAdminAccount } from "../types/domain";
 
 const ADMIN_SESSION_STORAGE_KEY = "satts.admin.session";
-const DEFAULT_SESSION_TTL_MS = 8 * 60 * 60 * 1000;
+const DEFAULT_SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1000;
 export type AdminRole = "SUPER_ADMIN" | "ADMIN";
 
 export interface AdminSession {
@@ -53,6 +53,13 @@ function isExpired(isoDateTime: string): boolean {
   return Date.now() >= expiresAtMs;
 }
 
+function writeSession(session: AdminSession): void {
+  if (!canUseStorage()) {
+    return;
+  }
+  window.localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify(session));
+}
+
 export function createAdminSession(
   admin: Pick<SystemAdminAccount, "adminId" | "name" | "email" | "role">,
   ttlMs = DEFAULT_SESSION_TTL_MS
@@ -67,9 +74,7 @@ export function createAdminSession(
     expiresAt: new Date(now.getTime() + ttlMs).toISOString(),
   };
 
-  if (canUseStorage()) {
-    window.localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, JSON.stringify(session));
-  }
+  writeSession(session);
   return session;
 }
 
@@ -83,10 +88,31 @@ export function readAdminSession(): AdminSession | null {
   }
 
   const session = parseSession(raw);
-  if (!session || isExpired(session.expiresAt)) {
+  if (!session) {
     window.localStorage.removeItem(ADMIN_SESSION_STORAGE_KEY);
     return null;
   }
+  if (isExpired(session.expiresAt)) {
+    const renewed: AdminSession = {
+      ...session,
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + DEFAULT_SESSION_TTL_MS).toISOString(),
+    };
+    writeSession(renewed);
+    return renewed;
+  }
+
+  const remainingMs = Date.parse(session.expiresAt) - Date.now();
+  if (remainingMs < DEFAULT_SESSION_TTL_MS / 2) {
+    const renewed: AdminSession = {
+      ...session,
+      issuedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + DEFAULT_SESSION_TTL_MS).toISOString(),
+    };
+    writeSession(renewed);
+    return renewed;
+  }
+
   return session;
 }
 

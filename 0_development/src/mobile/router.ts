@@ -1,4 +1,4 @@
-import { navigateTo } from "../shared/navigation";
+import { navigateTo, readLocationState } from "../shared/navigation";
 
 export const MOBILE_ROUTES = [
   "/m/login",
@@ -32,12 +32,10 @@ export function parseMobileRoute(pathname: string): MobileRoute {
 }
 
 export function readMobileRoute(): MobileRouteState {
-  if (typeof window === "undefined") {
-    return { route: DEFAULT_MOBILE_ROUTE, search: "" };
-  }
+  const location = readLocationState();
   return {
-    route: parseMobileRoute(window.location.pathname),
-    search: window.location.search,
+    route: parseMobileRoute(location.pathname),
+    search: location.search,
   };
 }
 export { navigateTo };

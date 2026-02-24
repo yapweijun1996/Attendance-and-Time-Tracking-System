@@ -1,4 +1,4 @@
-import { navigateTo } from "../shared/navigation";
+import { navigateTo, readLocationState } from "../shared/navigation";
 
 export const ADMIN_ROUTES = [
   "/admin/dashboard",
@@ -28,12 +28,10 @@ export function parseAdminRoute(pathname: string): AdminRoute {
 }
 
 export function readAdminRoute(): AdminRouteState {
-  if (typeof window === "undefined") {
-    return { route: DEFAULT_ADMIN_ROUTE, search: "" };
-  }
+  const location = readLocationState();
   return {
-    route: parseAdminRoute(window.location.pathname),
-    search: window.location.search,
+    route: parseAdminRoute(location.pathname),
+    search: location.search,
   };
 }
 

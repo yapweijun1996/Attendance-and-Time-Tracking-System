@@ -48,6 +48,7 @@ export interface CreateAttendanceLogInput {
 function mapDocToRecentEvent(doc: AttendanceLogDoc): RecentEvent {
   return {
     id: doc.eventId,
+    staffId: doc.staffId,
     action: doc.action,
     clientTs: doc.clientTs,
     geoStatus: doc.geoPolicyResult.status,
